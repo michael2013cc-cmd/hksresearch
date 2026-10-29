@@ -2,9 +2,27 @@ from pathlib import Path
 
 import httpx
 
-from hkexradar.pdf import download_pdf, extract_text, pdf_filename
+from hkexradar.pdf import (
+    _strip_disclaimer,
+    _tighten_cjk,
+    download_pdf,
+    extract_text,
+    pdf_filename,
+)
 
 FIXTURE_PDF = Path(__file__).resolve().parent / "fixtures" / "sample.pdf"
+
+
+def test_tighten_cjk_removes_spacing_artifacts():
+    assert _tighten_cjk("香 港 交 易 所 2026 年") == "香港交易所 2026 年"
+
+
+def test_strip_disclaimer_drops_header_block():
+    text = (
+        "香港交易及結算所有限公司對本公告的內容概不負責，對其準確性亦不發表任何聲明，"
+        "概不會就因本公告而引致的任何損失承擔任何責任。茲提述本公司日期為九月一日的公告。"
+    )
+    assert _strip_disclaimer(text).startswith("茲提述")
 
 
 def test_extract_text_from_real_pdf():

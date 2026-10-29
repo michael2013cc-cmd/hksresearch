@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import re
 import subprocess
 from pathlib import Path
 
 import httpx
+
+_DISCLAIMER_START = "對本公告的內容概不負責"
+_DISCLAIMER_END = "承擔任何責任。"
+_CJK_GAP = re.compile(r"(?<=[\u4e00-\u9fff])\s+(?=[\u4e00-\u9fff])")
 
 
 def pdf_filename(news_id: str) -> str:
@@ -31,6 +36,20 @@ def download_pdf(url: str, dest: Path, *, timeout: float = 60,
             client.close()
 
 
+def _tighten_cjk(text: str) -> str:
+    return _CJK_GAP.sub("", text)
+
+
+def _strip_disclaimer(text: str) -> str:
+    start = text.find(_DISCLAIMER_START)
+    if start == -1 or start > 400:
+        return text
+    end = text.find(_DISCLAIMER_END, start)
+    if end == -1:
+        return text
+    return text[end + len(_DISCLAIMER_END):].lstrip()
+
+
 def extract_text(path: Path, max_chars: int = 6000) -> tuple[str, str]:
     if not path.exists():
         return "", "unavailable"
@@ -45,7 +64,7 @@ def extract_text(path: Path, max_chars: int = 6000) -> tuple[str, str]:
     if process.returncode != 0:
         return "", "unavailable"
     text = process.stdout.decode("utf-8", errors="ignore").strip()
-    text = " ".join(text.split())
+    text = _strip_disclaimer(_tighten_cjk(" ".join(text.split())))
     if not text:
         return "", "unavailable"
     return text[:max_chars], "ok"

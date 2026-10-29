@@ -16,6 +16,10 @@ def _parts(value: str) -> list[str]:
     return [part.strip() for part in _BR.split(html.unescape(value or "")) if part.strip()]
 
 
+def _clean_text(value: str) -> str:
+    return re.sub(r"\s+", " ", html.unescape(value or "")).strip()
+
+
 def split_codes(value: str) -> tuple[str, list[str]]:
     parts = _parts(value)
     if not parts:
@@ -51,10 +55,10 @@ def normalize_row(raw: AnnouncementRaw) -> Announcement:
         alt_codes=alt_codes,
         stock_name=names[0] if names else raw.stock_name,
         published_at=raw.published_at,
-        title=raw.title,
+        title=_clean_text(raw.title),
         doc_group=group,
         headline_tags=tags,
-        category_label=html.unescape(raw.category_label).strip(),
+        category_label=_clean_text(raw.category_label),
         file_url=FILE_HOST + raw.file_link,
         file_bytes=parse_size(raw.file_info),
         is_revision=bool(_REVISION.search(raw.title)),

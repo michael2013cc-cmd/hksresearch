@@ -64,9 +64,10 @@ def run_day(day_text: str, *, root: Path, llm=None, raw_path: Path | None = None
             _attach_pdf(ann, raw_dir)
 
     insights = {}
-    for ann in to_read:
-        insight = read(ann, llm)
-        insights[ann.news_id] = insight
+    if llm is not None:
+        for ann in to_read:
+            insight = read(ann, llm)
+            insights[ann.news_id] = insight
 
     day_counts = Counter(
         (ann.doc_group, tuple(sorted(ann.headline_tags))) for ann in announcements

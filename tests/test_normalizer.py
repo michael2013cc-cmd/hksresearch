@@ -59,6 +59,11 @@ def test_revision_is_flagged_not_merged():
     assert ann.is_revision is True
 
 
+def test_title_whitespace_is_collapsed():
+    ann = normalize_row(_raw(title="(1)成立獨立委員會；\n(2)委任獨立調查機構"))
+    assert ann.title == "(1)成立獨立委員會； (2)委任獨立調查機構"
+
+
 def test_link_revisions_points_to_original():
     original = normalize_row(_raw(news_id="1", title="年度業績公告"))
     revised = normalize_row(
