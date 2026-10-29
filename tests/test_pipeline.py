@@ -1,9 +1,25 @@
 from pathlib import Path
 
-from hkexradar.pipeline import run_day
+from hkexradar.models import Announcement
+from hkexradar.pipeline import _attach_pdf, run_day
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "data" / "fixtures" / "2026-09-08.json"
+
+
+def test_non_pdf_link_is_skipped_without_download(tmp_path: Path):
+    ann = Announcement(
+        news_id="1",
+        primary_code="00001",
+        stock_name="示例",
+        published_at="2026-10-29T09:00:00",
+        title="交易所通告 - 短暫停牌",
+        doc_group="公告及通告",
+        category_label="公告及通告",
+        file_url="https://example.com/a.htm",
+    )
+    _attach_pdf(ann, tmp_path)
+    assert ann.text_status == "skipped"
 
 
 def test_full_chain_offline_produces_report(tmp_path: Path):

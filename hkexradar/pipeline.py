@@ -16,6 +16,9 @@ from .triage import triage
 
 
 def _attach_pdf(ann, raw_dir: Path) -> None:
+    if not ann.file_url.lower().endswith(".pdf"):
+        ann.text_status = "skipped"
+        return
     dest = raw_dir / "pdf" / pdf_filename(ann.news_id)
     if not download_pdf(ann.file_url, dest):
         ann.text_status = "unavailable"
