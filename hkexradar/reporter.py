@@ -77,6 +77,8 @@ def render_markdown(report: DailyReport) -> str:
         f"精讀 {report.read_count} 條 · 生成於 {report.generated_at.strftime('%H:%M')}"
     )
     lines.append("")
+    lines.append("> 所有發布時間均為香港時間（HKT），數據截至報告生成時刻。")
+    lines.append("")
     lines.append("## 今日概覽")
     lines.append("")
     lines.append(build_overview(report))

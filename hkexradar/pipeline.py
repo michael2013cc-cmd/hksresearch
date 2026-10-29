@@ -107,7 +107,12 @@ def run_day(day_text: str, *, root: Path, llm=None, raw_path: Path | None = None
             collection_errors=errors,
             pdf_unavailable=sum(1 for a in to_read if a.text_status == "unavailable"),
             revisions=sum(1 for a in announcements if a.is_revision),
-            llm_fallbacks=sum(1 for i in insights.values() if i.source == "rule"),
+            llm_fallbacks=sum(
+                1 for ann in to_read
+                if ann.text_status == "ok"
+                and insights.get(ann.news_id) is not None
+                and insights[ann.news_id].source == "rule"
+            ),
             total_records=len(announcements),
         ),
     )
