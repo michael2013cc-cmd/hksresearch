@@ -1,0 +1,106 @@
+from __future__ import annotations
+
+import json
+import time
+from datetime import date, datetime
+from pathlib import Path
+
+import httpx
+
+from .models import AnnouncementRaw
+
+BASE_URL = "https://www1.hkexnews.hk/search/titleSearchServlet.do"
+FILE_HOST = "https://www1.hkexnews.hk"
+_TIME_FORMATS = ("%d/%m/%Y %H:%M", "%d/%m/%Y %H:%M:%S")
+
+
+def build_params(day: date, row_range: int = 1000) -> dict:
+    day_text = day.strftime("%Y%m%d")
+    return {
+        "sortDir": 0,
+        "sortByOptions": "DateTime",
+        "category": 0,
+        "market": "SEHK",
+        "stockId": -1,
+        "documentType": -1,
+        "fromDate": day_text,
+        "toDate": day_text,
+        "title": "",
+        "searchType": 0,
+        "t1code": -2,
+        "t2Gcode": -2,
+        "t2code": -2,
+        "rowRange": row_range,
+        "lang": "ZH",
+    }
+
+
+def parse_datetime(value: str) -> datetime:
+    for fmt in _TIME_FORMATS:
+        try:
+            return datetime.strptime(value.strip(), fmt)
+        except ValueError:
+            continue
+    raise ValueError(f"unrecognized DATE_TIME: {value!r}")
+
+
+def parse_payload(payload: dict) -> list[AnnouncementRaw]:
+    raw_rows = payload.get("result") or "[]"
+    rows = json.loads(raw_rows) if isinstance(raw_rows, str) else raw_rows
+    result: list[AnnouncementRaw] = []
+    for row in rows:
+        result.append(
+            AnnouncementRaw(
+                news_id=str(row["NEWS_ID"]),
+                stock_code=row.get("STOCK_CODE", ""),
+                stock_name=row.get("STOCK_NAME", ""),
+                published_at=parse_datetime(row["DATE_TIME"]),
+                title=(row.get("TITLE") or "").strip(),
+                category_label=(row.get("LONG_TEXT") or row.get("SHORT_TEXT") or "").strip(),
+                file_type=row.get("FILE_TYPE", ""),
+                file_info=row.get("FILE_INFO", ""),
+                file_link=row.get("FILE_LINK", ""),
+            )
+        )
+    return result
+
+
+def fetch_payload(day: date, *, timeout: float = 60, retries: int = 3,
+                  client: httpx.Client | None = None) -> dict:
+    owns_client = client is None
+    client = client or httpx.Client(timeout=timeout)
+    last_error: Exception | None = None
+    try:
+        for attempt in range(retries):
+            try:
+                response = client.get(BASE_URL, params=build_params(day))
+                response.raise_for_status()
+                return response.json()
+            except Exception as exc:  # noqa: BLE001 - network faults are retried
+                last_error = exc
+                if attempt < retries - 1:
+                    time.sleep(2 ** (2 * attempt))
+        raise RuntimeError(f"fetch failed after {retries} attempts: {last_error}") from last_error
+    finally:
+        if owns_client:
+            client.close()
+
+
+def save_snapshot(payload: dict, path: Path) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=1), encoding="utf-8")
+    return path
+
+
+def load_snapshot(path: Path) -> dict:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def next_snapshot_path(raw_dir: Path) -> Path:
+    first = raw_dir / "announcements.json"
+    if not first.exists():
+        return first
+    index = 2
+    while (raw_dir / f"announcements.{index}.json").exists():
+        index += 1
+    return raw_dir / f"announcements.{index}.json"
