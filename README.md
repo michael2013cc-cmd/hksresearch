@@ -48,7 +48,7 @@ python -m hkexradar.run --date 2026-09-08 --offline data/fixtures/2026-09-08.jso
 python -m hkexradar.run --date 2026-09-08 --limit 10
 ```
 
-产物：`reports/YYYY-MM-DD-hkex-daily.md` 与同名 `.json`。每次实时抓取的原始响应快照保存在 `data/raw/YYYY-MM-DD/announcements*.json`，PDF 保存在同目录 `pdf/`。
+产物：`reports/YYYY-MM-DD-hkex-daily.md` 与同名 `.json`。Top 20 每条都标注具体发布时间，另附全部候选的发布时间时间线。每次实时抓取的原始响应快照保存在 `data/raw/YYYY-MM-DD/announcements*.json`，PDF 保存在同目录 `pdf/`。
 
 ## 测试
 
