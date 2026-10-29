@@ -30,6 +30,7 @@ def _render_item(rank: int, item: ScoredAnnouncement) -> list[str]:
     insight = item.insight
     lines = [f"### {rank}. [{item.grade}] {ann.stock_name}（{_code_text(item)}）— "
              f"{insight.summary_zh if insight else ann.title}"]
+    lines.append(f"- **發布時間**：{ann.published_at.strftime('%Y-%m-%d %H:%M')}")
     lines.append(f"- **類別**：{ann.category_label}")
     if insight and insight.facts:
         facts = "；".join(f"{fact.key} {fact.value}" for fact in insight.facts)
@@ -44,6 +45,26 @@ def _render_item(rank: int, item: ScoredAnnouncement) -> list[str]:
         f"（稀缺 {b.scarcity * 50:.0f} + 覆蓋 {b.coverage * 30:.0f} + 傳播 {b.spread * 20:.0f}）"
     )
     lines.append(f"- **原文**：[PDF]({ann.file_url})")
+    return lines
+
+
+def _short(text: str, limit: int) -> str:
+    text = text.replace("|", "／").replace("\n", " ").strip()
+    return text if len(text) <= limit else text[:limit] + "…"
+
+
+def _render_timeline(items: list[ScoredAnnouncement]) -> list[str]:
+    lines = [
+        "| 時間 | 代碼 | 公司 | 標題 | 級別 | 分數 | 原文 |",
+        "|------|------|------|------|------|------|------|",
+    ]
+    for item in sorted(items, key=lambda i: i.announcement.published_at):
+        ann = item.announcement
+        lines.append(
+            f"| {ann.published_at.strftime('%H:%M')} | {_code_text(item)} | "
+            f"{_short(ann.stock_name, 20)} | {_short(ann.title, 60)} | "
+            f"{item.grade} | {item.final_score} | [PDF]({ann.file_url}) |"
+        )
     return lines
 
 
@@ -68,6 +89,14 @@ def render_markdown(report: DailyReport) -> str:
     for rank, item in enumerate(report.top, start=1):
         lines.extend(_render_item(rank, item))
         lines.append("")
+
+    lines.append("## 全部候選（按發布時間）")
+    lines.append("")
+    if report.ranked:
+        lines.extend(_render_timeline(report.ranked))
+    else:
+        lines.append("（無候選）")
+    lines.append("")
 
     lines.append("## 分類統計")
     lines.append("")

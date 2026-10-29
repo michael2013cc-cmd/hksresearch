@@ -56,6 +56,7 @@ def _report() -> DailyReport:
         grade_counts={"S": 1, "A": 2, "B": 10, "C": 107},
         category_stats=[CategoryStat(doc_group="公告及通告", count=198)],
         top=[_scored()],
+        ranked=[_scored()],
         quality=Quality(collection_errors=[], pdf_unavailable=7, revisions=3, total_records=590),
     )
 
@@ -83,6 +84,13 @@ def test_markdown_shows_data_quality_numbers():
     md = render_markdown(_report())
     assert "PDF 抽取失敗：7 條" in md
     assert "疑似修訂版：3 條" in md
+
+
+def test_markdown_shows_publish_time_and_timeline():
+    md = render_markdown(_report())
+    assert "**發布時間**：2026-09-08 17:30" in md
+    assert "## 全部候選（按發布時間）" in md
+    assert "| 17:30 | 01234.HK | 示例控股 | 私有化建議 | A |" in md
 
 
 def test_write_report_creates_md_and_json(tmp_path: Path):

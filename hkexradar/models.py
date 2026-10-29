@@ -102,5 +102,6 @@ class DailyReport(BaseModel):
     grade_counts: dict[str, int] = Field(default_factory=dict)
     category_stats: list[CategoryStat] = Field(default_factory=list)
     top: list[ScoredAnnouncement] = Field(default_factory=list)
+    ranked: list[ScoredAnnouncement] = Field(default_factory=list)
     overview: str = ""
     quality: Quality = Field(default_factory=Quality)

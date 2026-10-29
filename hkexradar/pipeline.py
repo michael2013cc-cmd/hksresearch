@@ -99,6 +99,7 @@ def run_day(day_text: str, *, root: Path, llm=None, raw_path: Path | None = None
         grade_counts=grade_counts,
         category_stats=category_stats,
         top=scored[:top_n],
+        ranked=scored,
         quality=Quality(
             collection_errors=errors,
             pdf_unavailable=sum(1 for a in to_read if a.text_status == "unavailable"),
