@@ -57,6 +57,10 @@ def test_scale_factor_buckets():
     assert scale_factor([]) == (0.4, False)
 
 
+def test_scale_factor_parses_thousands_separators():
+    assert scale_factor([Fact(key="a", value="734,749,245 港元", quote="x")]) == (0.7, True)
+
+
 def test_surprise_factor_mapping():
     assert surprise_factor("high") == 1.0
     assert surprise_factor("medium") == 0.6

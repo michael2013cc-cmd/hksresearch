@@ -66,6 +66,33 @@ def test_code_fence_is_stripped(tmp_path: Path):
     assert client.complete_json("sys", "user") == {"a": 2}
 
 
+def test_reasoning_effort_is_sent_when_configured(tmp_path: Path):
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        assert body["reasoning_effort"] == "low"
+        return httpx.Response(200, json={"choices": [{"message": {"content": '{"a": 1}'}}]})
+
+    client = LLMClient(
+        base_url="https://example.com/v1",
+        api_key="sk-test",
+        model="test-model",
+        cache_dir=tmp_path / "cache",
+        transport=httpx.MockTransport(handler),
+        reasoning_effort="low",
+    )
+    assert client.complete_json("sys", "user") == {"a": 1}
+
+
+def test_reasoning_effort_omitted_by_default(tmp_path: Path):
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        assert "reasoning_effort" not in body
+        return httpx.Response(200, json={"choices": [{"message": {"content": '{"a": 1}'}}]})
+
+    client = _client(tmp_path, handler)
+    assert client.complete_json("sys", "user") == {"a": 1}
+
+
 def test_http_error_raises_llm_error(tmp_path: Path):
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(500, text="boom")

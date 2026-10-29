@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import re
-import subprocess
 from pathlib import Path
 
 import httpx
+import pymupdf
 
 _DISCLAIMER_START = "對本公告的內容概不負責"
 _DISCLAIMER_END = "承擔任何責任。"
@@ -40,6 +40,13 @@ def _tighten_cjk(text: str) -> str:
     return _CJK_GAP.sub("", text)
 
 
+def _looks_garbled(text: str) -> bool:
+    if len(text) < 100:
+        return False
+    cjk = sum(1 for ch in text if "\u4e00" <= ch <= "\u9fff")
+    return cjk / len(text) < 0.05
+
+
 def _strip_disclaimer(text: str) -> str:
     start = text.find(_DISCLAIMER_START)
     if start == -1 or start > 400:
@@ -54,17 +61,17 @@ def extract_text(path: Path, max_chars: int = 6000) -> tuple[str, str]:
     if not path.exists():
         return "", "unavailable"
     try:
-        process = subprocess.run(
-            ["pdftotext", "-enc", "UTF-8", "-f", "1", "-l", "5", str(path), "-"],
-            capture_output=True,
-            timeout=60,
-        )
-    except Exception:  # noqa: BLE001
+        document = pymupdf.open(path)
+        try:
+            raw = "\n".join(
+                document[index].get_text("text")
+                for index in range(min(5, len(document)))
+            )
+        finally:
+            document.close()
+    except Exception:  # noqa: BLE001 - 单份解析失败只降级该条
         return "", "unavailable"
-    if process.returncode != 0:
-        return "", "unavailable"
-    text = process.stdout.decode("utf-8", errors="ignore").strip()
-    text = _strip_disclaimer(_tighten_cjk(" ".join(text.split())))
-    if not text:
+    text = _strip_disclaimer(_tighten_cjk(" ".join(raw.split())))
+    if not text or _looks_garbled(text):
         return "", "unavailable"
     return text[:max_chars], "ok"

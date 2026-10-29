@@ -13,7 +13,7 @@ from .models import (
 )
 
 _UNITS = {"億": 1e8, "亿": 1e8, "百萬": 1e6, "百万": 1e6, "萬": 1e4, "万": 1e4, "千": 1e3}
-_AMOUNT = re.compile(r"(\d+(?:\.\d+)?)\s*(億|亿|百萬|百万|萬|万|千)?\s*(港元|港幣|人民幣|人民幣|美元|元)?")
+_AMOUNT = re.compile(r"(\d[\d,]*(?:\.\d+)?)\s*(億|亿|百萬|百万|萬|万|千)?\s*(港元|港幣|人民幣|人民幣|美元|元)?")
 _SURPRISE = {"high": 1.0, "medium": 0.6, "low": 0.2}
 
 
@@ -31,7 +31,7 @@ def scale_factor(facts: list[Fact]) -> tuple[float, bool]:
             if not match.group(2) and not match.group(3):
                 continue
             multiplier = _UNITS.get(match.group(2) or "", 1.0)
-            best = max(best, float(match.group(1)) * multiplier)
+            best = max(best, float(match.group(1).replace(",", "")) * multiplier)
     if best <= 0:
         return 0.4, False
     for cut, value in ((1e10, 1.0), (1e9, 0.85), (1e8, 0.7), (1e7, 0.5), (1e6, 0.3)):

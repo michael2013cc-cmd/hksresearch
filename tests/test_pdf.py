@@ -3,6 +3,7 @@ from pathlib import Path
 import httpx
 
 from hkexradar.pdf import (
+    _looks_garbled,
     _strip_disclaimer,
     _tighten_cjk,
     download_pdf,
@@ -11,6 +12,11 @@ from hkexradar.pdf import (
 )
 
 FIXTURE_PDF = Path(__file__).resolve().parent / "fixtures" / "sample.pdf"
+
+
+def test_garbled_text_is_detected():
+    assert _looks_garbled("࠰ಥʹ˄ʿഐၑʮ̡" * 20)
+    assert not _looks_garbled("本公司預期錄得虧損約人民幣1.2億元。" * 5)
 
 
 def test_tighten_cjk_removes_spacing_artifacts():

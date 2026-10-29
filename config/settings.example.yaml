@@ -3,6 +3,7 @@ llm:
   model: deepseek-chat
   api_key_env: DEEPSEEK_API_KEY
   timeout_seconds: 90
+  reasoning_effort: null   # MiniMax: low/max; DeepSeek: leave null
 collector:
   rate_limit_per_sec: 2
   timeout_seconds: 60

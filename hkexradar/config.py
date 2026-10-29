@@ -12,6 +12,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         "model": "deepseek-chat",
         "api_key_env": "DEEPSEEK_API_KEY",
         "timeout_seconds": 90,
+        "reasoning_effort": None,
     },
     "collector": {"rate_limit_per_sec": 2, "timeout_seconds": 60, "retries": 3},
     "pipeline": {"read_top_n": 60, "report_top_n": 20},

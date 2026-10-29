@@ -7,10 +7,10 @@
 无需安装包，直接使用系统 Python 3.11：
 
 ```bash
-pip install httpx pydantic PyYAML pytest
+pip install httpx pydantic PyYAML pymupdf pytest
 ```
 
-需要 `pdftotext` 在 PATH 中（Git Bash 自带 `/mingw64/bin/pdftotext`）。
+PDF 文本用 PyMuPDF 抽取（比 Xpdf 自带的 `pdftotext` 更能处理港交所常用的 CID 字体）；抽取后若中文字符占比过低会判定为乱码并降级为规则摘要。
 
 ## 配置
 
@@ -20,6 +20,20 @@ export DEEPSEEK_API_KEY=sk-...
 ```
 
 不配 key 时自动降级为规则摘要（等同 `--no-llm`）。
+
+MiniMax 国际版示例（`config/settings.yaml`）：
+
+```yaml
+llm:
+  base_url: https://api.minimax.io/v1
+  model: MiniMax-M3.1-Flash
+  api_key_env: MINIMAX_API_KEY
+  reasoning_effort: low   # low / max；low 约 5 秒/条，max 约 30 秒/条
+```
+
+```bash
+export MINIMAX_API_KEY=sk-...
+```
 
 ## 运行
 
@@ -49,7 +63,7 @@ python -m pytest -v
 1. Collector：`titleSearchServlet` 单次拉取全天数据（`rowRange=1000`），失败指数退避重试。
 2. Normalizer：多柜台代码拆分、HTML 反转义、修订版标记、按文件链接去重。
 3. Triage：按 `config/routine_rules.yaml` 剔除月报表、ETF 交易资料等例常件，590 条压到约 121 条。
-4. Reader：下载 PDF，`pdftotext` 抽前 5 页并去掉标准免责声明，LLM 输出摘要与事实；事实引文必须能在正文中原样找到，否则丢弃。
+4. Reader：下载 PDF，PyMuPDF 抽前 5 页并去掉标准免责声明，LLM 输出摘要与事实；事实引文必须能在正文中原样找到，否则丢弃。
 5. Scorer：`magnitude = 40×类别先验 + 20×规模 + 40×意外度`；`interest = 50×稀缺度 + 30×覆盖度 + 20×传播潜力`；`final = 0.6×magnitude + 0.4×interest`，S≥80、A≥65、B≥50、C<50。
 6. Reporter：Markdown 日报 + JSON（含完整评分拆解与数据质量统计）。
 

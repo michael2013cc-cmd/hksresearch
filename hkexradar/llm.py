@@ -16,16 +16,18 @@ class LLMError(RuntimeError):
 
 class LLMClient:
     def __init__(self, base_url: str, api_key: str, model: str, cache_dir: Path,
-                 timeout: float = 90, transport: httpx.BaseTransport | None = None):
+                 timeout: float = 90, transport: httpx.BaseTransport | None = None,
+                 reasoning_effort: str | None = None):
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.model = model
         self.cache_dir = Path(cache_dir)
+        self.reasoning_effort = reasoning_effort
         self.client = httpx.Client(timeout=timeout, transport=transport)
 
     def _cache_path(self, system: str, user: str) -> Path:
         digest = hashlib.sha256(
-            f"{self.model}\n{system}\n{user}".encode("utf-8")
+            f"{self.model}\n{self.reasoning_effort}\n{system}\n{user}".encode("utf-8")
         ).hexdigest()
         return self.cache_dir / f"{digest}.json"
 
@@ -43,6 +45,8 @@ class LLMClient:
                 {"role": "user", "content": user},
             ],
         }
+        if self.reasoning_effort:
+            body["reasoning_effort"] = self.reasoning_effort
         try:
             response = self.client.post(
                 f"{self.base_url}/chat/completions",

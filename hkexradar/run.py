@@ -29,6 +29,7 @@ def main(argv: list[str] | None = None) -> int:
                 model=settings["llm"]["model"],
                 cache_dir=root / "data" / "cache" / "insights",
                 timeout=settings["llm"]["timeout_seconds"],
+                reasoning_effort=settings["llm"].get("reasoning_effort"),
             )
         else:
             print("warning: no API key, falling back to rule summaries")
