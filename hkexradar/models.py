@@ -96,6 +96,7 @@ class Quality(BaseModel):
 class DailyReport(BaseModel):
     report_date: date
     generated_at: datetime
+    window_from: str | None = None
     total: int
     candidate_count: int
     read_count: int

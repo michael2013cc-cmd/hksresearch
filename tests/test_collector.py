@@ -6,6 +6,7 @@ import httpx
 
 from hkexradar.collector import (
     build_params,
+    fetch_day_payload,
     fetch_payload,
     parse_datetime,
     parse_payload,
@@ -84,6 +85,26 @@ def test_fetch_payload_gives_up_after_retries(monkeypatch):
         assert "after 2 attempts" in str(exc)
     else:
         raise AssertionError("expected RuntimeError")
+
+
+def test_fetch_day_payload_merges_both_directions_when_capped():
+    middle = {**ROW, "NEWS_ID": "2", "DATE_TIME": "08/09/2026 22:00"}
+    oldest = {**ROW, "NEWS_ID": "3", "DATE_TIME": "08/09/2026 07:00"}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        rows = [ROW, middle] if request.url.params.get("sortDir") == "0" else [middle, oldest]
+        return httpx.Response(200, json={
+            "result": json.dumps(rows, ensure_ascii=False),
+            "recordCnt": len(rows),
+            "hasNextRow": True,
+        })
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    payload = fetch_day_payload(date(2026, 9, 8), client=client)
+    rows = json.loads(payload["result"])
+    assert [row["NEWS_ID"] for row in rows] == ["3", "2", "12325368"]
+    assert payload["recordCnt"] == 3
+    assert payload["hasNextRow"] is False
 
 
 def test_save_snapshot_is_written_verbatim(tmp_path: Path):

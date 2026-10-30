@@ -65,15 +65,15 @@ def parse_payload(payload: dict) -> list[AnnouncementRaw]:
     return result
 
 
-def fetch_payload(day: date, *, timeout: float = 60, retries: int = 3,
-                  client: httpx.Client | None = None) -> dict:
+def _request(params: dict, *, timeout: float, retries: int,
+             client: httpx.Client | None) -> dict:
     owns_client = client is None
     client = client or httpx.Client(timeout=timeout)
     last_error: Exception | None = None
     try:
         for attempt in range(retries):
             try:
-                response = client.get(BASE_URL, params=build_params(day))
+                response = client.get(BASE_URL, params=params)
                 response.raise_for_status()
                 return response.json()
             except Exception as exc:  # noqa: BLE001 - network faults are retried
@@ -84,6 +84,44 @@ def fetch_payload(day: date, *, timeout: float = 60, retries: int = 3,
     finally:
         if owns_client:
             client.close()
+
+
+def fetch_payload(day: date, *, timeout: float = 60, retries: int = 3,
+                  client: httpx.Client | None = None) -> dict:
+    return _request(build_params(day), timeout=timeout, retries=retries, client=client)
+
+
+def _rows(payload: dict) -> list[dict]:
+    raw_rows = payload.get("result") or "[]"
+    return json.loads(raw_rows) if isinstance(raw_rows, str) else raw_rows
+
+
+def merge_payloads(newest: dict, oldest: dict) -> dict:
+    unique: dict[str, dict] = {}
+    for row in _rows(oldest) + _rows(newest):
+        unique[str(row["NEWS_ID"])] = row
+    rows = sorted(
+        unique.values(),
+        key=lambda row: (parse_datetime(row["DATE_TIME"]), str(row["NEWS_ID"])),
+    )
+    merged = dict(newest)
+    merged["result"] = json.dumps(rows, ensure_ascii=False)
+    merged["recordCnt"] = len(rows)
+    merged["loadedRecord"] = len(rows)
+    merged["hasNextRow"] = False
+    return merged
+
+
+def fetch_day_payload(day: date, *, timeout: float = 60, retries: int = 3,
+                      client: httpx.Client | None = None) -> dict:
+    """Row range is capped at 1000, so a busy day needs both sort directions."""
+    newest = fetch_payload(day, timeout=timeout, retries=retries, client=client)
+    if newest.get("hasNextRow") not in (True, "true"):
+        return newest
+    params = build_params(day)
+    params["sortDir"] = 1
+    oldest = _request(params, timeout=timeout, retries=retries, client=client)
+    return merge_payloads(newest, oldest)
 
 
 def save_snapshot(payload: dict, path: Path) -> Path:

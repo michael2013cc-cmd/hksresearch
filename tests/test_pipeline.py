@@ -1,3 +1,4 @@
+from datetime import time
 from pathlib import Path
 
 from hkexradar.models import Announcement
@@ -39,6 +40,20 @@ def test_full_chain_offline_produces_report(tmp_path: Path):
     assert report.overview
     assert (tmp_path / "2026-09-08-hkex-daily.md").exists()
     assert (tmp_path / "2026-09-08-hkex-daily.json").exists()
+
+
+def test_from_time_keeps_only_the_window(tmp_path: Path):
+    report = run_day(
+        "2026-09-08", root=ROOT, raw_path=FIXTURE,
+        download_pdf=False, out_dir=tmp_path, read_top_n=0,
+        from_time=time(21, 0),
+    )
+    assert 0 < report.total < 590
+    assert report.window_from == "21:00"
+    assert all(item.announcement.published_at.time() >= time(21, 0)
+               for item in report.ranked)
+    text = (tmp_path / "2026-09-08-hkex-daily.md").read_text(encoding="utf-8")
+    assert "統計窗口：21:00 起" in text
 
 
 def test_scores_are_sorted_descending(tmp_path: Path):

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from datetime import datetime
 from pathlib import Path
 
 from .config import api_key, load_settings
@@ -15,7 +16,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-llm", action="store_true", help="use rule summaries only")
     parser.add_argument("--limit", type=int, default=None, help="max announcements to read")
     parser.add_argument("--no-pdf", action="store_true", help="skip pdf download")
+    parser.add_argument("--from-time", default=None, metavar="HH:MM",
+                        help="only include announcements published at or after this HKT time")
     args = parser.parse_args(argv)
+
+    from_time = None
+    if args.from_time:
+        from_time = datetime.strptime(args.from_time, "%H:%M").time()
 
     root = Path(__file__).resolve().parents[1]
     settings = load_settings(root)
@@ -41,6 +48,7 @@ def main(argv: list[str] | None = None) -> int:
         raw_path=args.offline,
         download_pdf=not args.no_pdf,
         read_top_n=args.limit,
+        from_time=from_time,
     )
     print(f"total={report.total} candidates={report.candidate_count} "
           f"read={report.read_count} top={len(report.top)}")

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from collections import Counter
-from datetime import date, datetime
+from datetime import date, datetime, time
 from pathlib import Path
 
-from .collector import fetch_payload, load_snapshot, next_snapshot_path, parse_payload, save_snapshot
+from .collector import fetch_day_payload, load_snapshot, next_snapshot_path, parse_payload, save_snapshot
 from .config import load_priors, load_rules, load_settings
 from .models import CategoryStat, DailyReport, Quality
 from .normalizer import normalize_all
@@ -29,7 +29,8 @@ def _attach_pdf(ann, raw_dir: Path) -> None:
 
 def run_day(day_text: str, *, root: Path, llm=None, raw_path: Path | None = None,
             download_pdf: bool = True, out_dir: Path | None = None,
-            read_top_n: int | None = None, report_top_n: int | None = None) -> DailyReport:
+            read_top_n: int | None = None, report_top_n: int | None = None,
+            from_time: time | None = None) -> DailyReport:
     settings = load_settings(root)
     rules = load_rules(root)
     priors = load_priors(root)
@@ -42,7 +43,7 @@ def run_day(day_text: str, *, root: Path, llm=None, raw_path: Path | None = None
         payload = load_snapshot(raw_path)
     else:
         try:
-            payload = fetch_payload(
+            payload = fetch_day_payload(
                 day,
                 timeout=settings["collector"]["timeout_seconds"],
                 retries=settings["collector"]["retries"],
@@ -52,6 +53,8 @@ def run_day(day_text: str, *, root: Path, llm=None, raw_path: Path | None = None
             raise RuntimeError(f"collection failed: {exc}") from exc
 
     raws = parse_payload(payload)
+    if from_time is not None:
+        raws = [raw for raw in raws if raw.published_at.time() >= from_time]
     announcements = normalize_all(raws)
 
     candidates, reasons = triage(announcements, rules)
@@ -96,6 +99,7 @@ def run_day(day_text: str, *, root: Path, llm=None, raw_path: Path | None = None
     report = DailyReport(
         report_date=day,
         generated_at=datetime.now(),
+        window_from=from_time.strftime("%H:%M") if from_time else None,
         total=len(announcements),
         candidate_count=len(candidates),
         read_count=len(insights),
