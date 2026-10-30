@@ -50,6 +50,16 @@ python -m hkexradar.run --date 2026-09-08 --limit 10
 
 产物：`reports/YYYY-MM-DD-hkex-daily.md` 与同名 `.json`。Top 20 每条都标注具体发布时间，另附全部候选的发布时间时间线。每次实时抓取的原始响应快照保存在 `data/raw/YYYY-MM-DD/announcements*.json`，PDF 保存在同目录 `pdf/`。
 
+## 翌日披露报表专项分析
+
+只处理 `doc_group == "翌日披露报表"` 的公告，逐份解析 FF305 表格的股份变动、購回報告、庫存股份出售，按内容而非交易所标签分类：
+
+```bash
+PYTHONPATH=. python scripts/ndr_analysis.py --date 2026-10-30
+```
+
+产物：`reports/YYYY-MM-DD-ndr-analysis.md`（分类分布、回購金额、註銷、发行事件、全部明细）与同名 `.json`。PDF 并发下载（8 线程），分类逻辑在 `hkexradar/ndr.py`。
+
 ## 测试
 
 ```bash
