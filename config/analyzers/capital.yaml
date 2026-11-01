@@ -1,0 +1,4 @@
+thresholds:
+  dilution_p0_pct: 10
+  dilution_p1_pct: 5
+  rights_low_acceptance_pct: 90

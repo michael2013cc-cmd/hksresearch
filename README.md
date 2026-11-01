@@ -74,6 +74,21 @@ cat config/analyzers/ndr.yaml
 sqlite3 data/events.db "select code,type,summary from events where substr(created_at,1,10)='2026-10-30'"
 ```
 
+## 資本動作專項分析
+
+掃描「公告及通告」中的配售、供股、認購、可換股、股份合併類公告，逐份抽取發行股數、價格、募資總額/淨額、發行前/後佔比、供股認購率與未獲認購股數：
+
+```bash
+PYTHONPATH=. python scripts/capital_analysis.py --date 2026-10-30
+```
+
+產物：`reports/YYYY-MM-DD-capital-actions.md` 與同名 `.json`；事件以 `family=capital` 寫入 `data/events.db`，事實帶頁碼與原文。
+
+- 告警：攤薄（按發行前股本）≥10% 為 P0，5–10% 為 P1；供股認購率 <90% 為 P1。
+- 「配售最多 X 股」標記為 `配售/認購（上限）`，比例按上限計算，避免把上限當成確定發行。
+- 延遲寄發通函、澄清、條款調整歸入「其他命中」，不強行抽數字。
+- 閾值在 `config/analyzers/capital.yaml`。
+
 ## 技能
 
 `skills/hkex-radar/` 是可安装的 Qoder 技能（公告分类体系、NDR 操作手册、决策规则）。安装到用户级：

@@ -4,7 +4,7 @@ import re
 from dataclasses import dataclass, field
 from functools import partial
 
-from .base import AnalyzerEvent, AnalyzerFact, AnalyzerResult, Evidence
+from .base import AnalyzerEvent, AnalyzerFact, AnalyzerResult, make_fact
 
 _DATE = r"\d{4}年\d{1,2}月\d{1,2}日"
 _EVENT_HEAD = re.compile(r"(\d+)\)\.\s*")
@@ -256,35 +256,6 @@ def filing_numbers(filing: Filing) -> tuple[int, int, int]:
     return issued, cancelled, issued_new
 
 
-def _quote(text: str, needle: str, width: int = 140) -> str:
-    index = text.find(needle)
-    if index < 0:
-        return text[:width].strip()
-    start = max(0, index - 30)
-    return text[start:index + width].strip()
-
-
-def _fact(key: str, value: int | float | None, text: str, needle: str,
-          *, unit: str | None = None, currency: str | None = None,
-          pages: list[tuple[int, str]] | None = None) -> "AnalyzerFact | None":
-    if value is None or value == 0:
-        return None
-    shown = str(int(value)) if isinstance(value, float) and value.is_integer() else str(value)
-    quote = _quote(text, needle)
-    page = None
-    if pages:
-        page = next((number for number, content in pages if quote in content), None)
-        if page is None:
-            page = next((number for number, content in pages if needle in content), None)
-    return AnalyzerFact(
-        key=key,
-        value=shown,
-        unit=unit,
-        currency=currency,
-        evidence=Evidence(page=page, quote=quote),
-    )
-
-
 class NdrAnalyzer:
     family = "ndr"
 
@@ -295,7 +266,7 @@ class NdrAnalyzer:
                 pages: list[tuple[int, str]] | None = None) -> AnalyzerResult:
         filing = parse_filing(ann.news_id, text)
         facts: list[AnalyzerFact] = []
-        make = partial(_fact, pages=pages)
+        make = partial(make_fact, pages=pages)
 
         buyback_shares = sum(item.shares for item in filing.buybacks)
         candidates = [

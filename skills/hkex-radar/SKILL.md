@@ -44,6 +44,9 @@ python -m hkexradar.run --date 2026-09-08 --offline data/fixtures/2026-09-08.jso
 
 # 只分析翌日披露报表
 PYTHONPATH=. python scripts/ndr_analysis.py --date 2026-10-30
+
+# 只分析资本动作（配售/供股/认购/可换股/合并）
+PYTHONPATH=. python scripts/capital_analysis.py --date 2026-10-30
 ```
 
 产物：
@@ -51,6 +54,7 @@ PYTHONPATH=. python scripts/ndr_analysis.py --date 2026-10-30
 - `reports/YYYY-MM-DD-hkex-daily.md`：全市场日报。
 - `reports/YYYY-MM-DD-ndr-analysis.md`：NDR 分类明细。
 - `reports/YYYY-MM-DD-ndr-brief.md`：NDR 决策简报（P0/P1 + Top 5）。
+- `reports/YYYY-MM-DD-capital-actions.md`：资本动作简报（摊薄/供股认购率/完成/终止）。
 - `data/events.db`：事件库（documents / events / facts / links）。
 
 快速查询（Windows 不一定有 `sqlite3` CLI）：
@@ -76,6 +80,8 @@ for row in con.execute('''
 - **交易所标签不等于内容**：NDR 的“股份購回”标签下可能当日零回购；“其他”标签下可能藏着配售、供股、股份合并。
 - 没有原文引文的数字不得进入结论；引文必须能在 PDF 文本中找到。
 - 比例必须写清分母（期初股本 / 期末股本 / 市值 / 成交额），不能把绝对金额当影响力。
+- 配售「最多 X 股」是上限，必须标明「上限」，不能当成已发行。
+- 通函、上市文件不独立抽数字；延迟寄发通函/澄清归入「其他命中」，不假装有结果。
 - 不输出买卖建议；“方向”是语义描述，不是股价预测。
 - 未接入行情数据时，明确写“未按市值/成交额归一”。
 
@@ -86,7 +92,7 @@ for row in con.execute('''
 | NDR（回购/注销/发行） | `references/ndr-playbook.md` | 已实现 |
 | 分类路由与例行清单 | `references/taxonomy.md` | 已实现 |
 | 告警与决策口径 | `references/decision-rules.md` | 已实现 |
-| 资本动作（配售/供股/可转债） | P2，未实现 | 计划中 |
+| 资本动作（配售/供股/可转债） | `references/capital-playbook.md` | 已实现（完成/结果/终止） |
 | 交易（须予披露/关连） | P3，未实现 | 计划中 |
 | 业绩/盈警 | P4，未实现 | 计划中 |
 | 治理/股息/停复牌 | P3–P5，未实现 | 计划中 |

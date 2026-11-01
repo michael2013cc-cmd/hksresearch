@@ -42,6 +42,35 @@ class AnalyzerResult(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+def quote_around(text: str, needle: str, width: int = 140) -> str:
+    index = text.find(needle)
+    if index < 0:
+        return text[:width].strip()
+    start = max(0, index - 30)
+    return text[start:index + width].strip()
+
+
+def make_fact(key: str, value: int | float | None, text: str, needle: str,
+              *, unit: str | None = None, currency: str | None = None,
+              pages: list[tuple[int, str]] | None = None) -> AnalyzerFact | None:
+    if value is None or value == 0:
+        return None
+    shown = str(int(value)) if isinstance(value, float) and value.is_integer() else str(value)
+    quote = quote_around(text, needle)
+    page = None
+    if pages:
+        page = next((number for number, content in pages if quote in content), None)
+        if page is None:
+            page = next((number for number, content in pages if needle in content), None)
+    return AnalyzerFact(
+        key=key,
+        value=shown,
+        unit=unit,
+        currency=currency,
+        evidence=Evidence(page=page, quote=quote),
+    )
+
+
 @runtime_checkable
 class Analyzer(Protocol):
     family: str
