@@ -1,6 +1,7 @@
 from datetime import datetime
 
-from hkexradar.ndr_brief import build_alerts, render_brief
+from hkexradar.marketdata import Quote
+from hkexradar.ndr_brief import attach_market, build_alerts, render_brief
 
 THRESHOLDS = {
     "dilution_p0_pct": 10.0,
@@ -90,3 +91,33 @@ def test_render_brief_contains_alerts_and_quality():
     assert "P0" in text
     assert "00700" in text
     assert "配售 120,000 股" in text
+
+
+def test_attach_market_scales_buyback_by_cap_and_turnover():
+    row = _row(code="01378", end_shares=1_000_000_000, buyback_shares=30_000_000,
+               buyback_amounts={"HKD": 100_000_000})
+    quotes = {
+        "01378": Quote(code="01378", name="CHINAHONGQIAO", currency="HKD",
+                       prev_close=1.98, close=2.0, high=2.05, low=1.95,
+                       shares_traded=25_000_000, turnover=50_000_000.0),
+    }
+
+    attach_market([row], quotes)
+
+    assert row["market_cap"] == 2_000_000_000
+    assert row["buyback_to_cap"] == 5.0
+    assert row["buyback_to_turnover"] == 2.0
+
+
+def test_render_brief_shows_buyback_market_impact():
+    row = _row(code="01378", end_shares=1_000_000_000, buyback_shares=30_000_000,
+               buyback_amounts={"HKD": 100_000_000}, market_cap=2_000_000_000,
+               buyback_to_cap=5.0, buyback_to_turnover=2.0)
+    alerts = build_alerts([row], THRESHOLDS)
+
+    text = render_brief([row], alerts, {"total": 1, "text_failures": [],
+                                        "market_quotes": 17_102},
+                        datetime(2026, 10, 30, 21, 0))
+
+    assert "佔市值 5.00%" in text
+    assert "成交額 2.0x" in text

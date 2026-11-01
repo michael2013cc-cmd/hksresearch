@@ -210,6 +210,21 @@ class EventStore:
         )
         return [dict(row) for row in rows]
 
+    def latest_fact(self, code: str, key: str, on_or_before: str | None = None) -> dict | None:
+        sql = (
+            "SELECT f.*, e.family, d.published_at FROM facts f "
+            "JOIN events e ON e.event_id = f.event_id "
+            "JOIN documents d ON d.news_id = e.news_id "
+            "WHERE e.code = ? AND f.key = ?"
+        )
+        params: list[str] = [code, key]
+        if on_or_before:
+            sql += " AND substr(d.published_at, 1, 10) <= ?"
+            params.append(on_or_before)
+        sql += " ORDER BY d.published_at DESC, f.event_id DESC LIMIT 1"
+        row = self.conn.execute(sql, params).fetchone()
+        return dict(row) if row else None
+
     def count_events(self, day: str | None = None, code: str | None = None) -> int:
         sql = "SELECT COUNT(*) FROM events e JOIN documents d ON d.news_id = e.news_id WHERE 1=1"
         params: list[str] = []

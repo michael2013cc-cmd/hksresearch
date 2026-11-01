@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
+from typing import Mapping
 
 from .config import load_yaml
+from .marketdata import Quote, market_cap
 
 DEFAULT_THRESHOLDS = {
     "dilution_p0_pct": 10.0,
@@ -15,6 +17,19 @@ DEFAULT_THRESHOLDS = {
 
 _ISSUANCE = {"配售/認購", "供股", "股份計劃發行", "以股代息", "單位發行", "內資股轉H股"}
 _NON_DILUTIVE = {"內資股轉H股", "股份合併/資本重組"}
+
+
+def attach_market(rows: list[dict], quotes: Mapping[str, Quote]) -> list[dict]:
+    for row in rows:
+        quote = quotes.get(str(row.get("code", "")).zfill(5))
+        cap = market_cap(quote, row.get("end_shares")) if quote else None
+        amount = (row.get("buyback_amounts") or {}).get("HKD")
+        row["market_cap"] = cap
+        row["buyback_to_cap"] = amount / cap * 100 if amount and cap else None
+        row["buyback_to_turnover"] = (
+            amount / quote.turnover if amount and quote is not None and quote.turnover else None
+        )
+    return rows
 
 
 def load_thresholds(root: Path) -> dict:
@@ -114,9 +129,14 @@ def render_brief(rows: list[dict], alerts: list[dict], stats: dict, generated_at
     p1 = [alert for alert in alerts if alert["level"] == "P1"]
 
     lines = [f"# 翌日披露報表決策簡報 · {day}", ""]
+    market_note = (
+        "回購金額另按當日收市價推算市值與成交額歸一；未做 20 日 ADV。"
+        if stats.get("market_quotes") else
+        "尚未接入市值/成交額，比例只按股本計算。"
+    )
     lines.append(
         f"> 共 {stats.get('total', len(rows))} 份；P0 {len(p0)} 條、P1 {len(p1)} 條。"
-        "金額與股數按期末股本計算比例；尚未接入市值/成交額，未做跨公司歸一。"
+        + market_note
     )
     lines.append("")
 
@@ -145,7 +165,15 @@ def render_brief(rows: list[dict], alerts: list[dict], stats: dict, generated_at
     for row in top_buyback:
         amounts = row.get("buyback_amounts") or {}
         money = " / ".join(f"{cur or '?'} {value:,.0f}" for cur, value in amounts.items()) or "—"
-        lines.append(f"- {row['time']} {row['code']} {row['name']}：{row['buyback_shares']:,} 股（{money}）")
+        impact = ""
+        if row.get("buyback_to_cap") is not None:
+            impact += f"，佔市值 {row['buyback_to_cap']:.2f}%"
+        if row.get("buyback_to_turnover") is not None:
+            impact += f"，成交額 {row['buyback_to_turnover']:.1f}x"
+        lines.append(
+            f"- {row['time']} {row['code']} {row['name']}："
+            f"{row['buyback_shares']:,} 股（{money}{impact}）"
+        )
     if not top_buyback:
         lines.append("- 無")
     lines.append("")
@@ -164,6 +192,15 @@ def render_brief(rows: list[dict], alerts: list[dict], stats: dict, generated_at
     failures = stats.get("text_failures") or []
     lines.append(f"- 文字抽取失敗：{len(failures)} 份" + (f"（{', '.join(failures)}）" if failures else ""))
     lines.append(f"- 事件庫寫入：{'完成' if stats.get('stored') else '未寫入'}")
-    lines.append("- 口徑：P0/P1 由 config/analyzers/ndr.yaml 閾值觸發；未接入行情數據前，比例只按股本計算。")
+    if stats.get("market_quotes"):
+        lines.append(
+            f"- 行情：{stats['market_quotes']:,} 隻報價，匹配 "
+            f"{stats.get('market_matched', 0)}/{len(rows)} 份；市值為期末股本×收市價 proxy。"
+        )
+    else:
+        lines.append("- 行情：未接入，回購未按市值/成交額歸一。")
+    if stats.get("market_error"):
+        lines.append(f"- 行情抓取失敗：{stats['market_error']}")
+    lines.append("- 口徑：P0/P1 由 config/analyzers/ndr.yaml 閾值觸發；比例按公告股本計算。")
     lines.append("")
     return "\n".join(lines)

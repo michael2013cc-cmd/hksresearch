@@ -28,6 +28,23 @@ def _match(pattern: str, text: str):
     return re.search(pattern, text)
 
 
+def _deal_text(text: str, sentences: int = 2) -> str:
+    positions = [text.find(word) for word in ("配售股份", "認購股份", "供股股份")]
+    positions = [pos for pos in positions if pos >= 0]
+    if not positions:
+        return text
+    anchor = min(positions)
+    begin = text.rfind("。", 0, anchor)
+    begin = 0 if begin < 0 else begin + 1
+    end = anchor
+    for _ in range(sentences):
+        stop = text.find("。", end)
+        if stop < 0:
+            return text[begin:]
+        end = stop + 1
+    return text[begin:end]
+
+
 def _number(raw: str | None) -> float | None:
     if not raw:
         return None
@@ -85,10 +102,11 @@ class CapitalActionsAnalyzer:
         price, price_needle = self._price(text)
         gross, gross_needle = self._gross(text)
         net, net_needle = self._net(text)
-        existing = _match(r"(?:現有已發行股本|已發行股份總數)\s*約?\s*([\d.]+)\s*%", text)
-        post = _match(r"擴大[後之的]?[^。%]{0,60}?約?\s*([\d.]+)\s*%", text)
+        existing = _match(r"(?:現有已發行股本|已發行股份總數)的?\s*約?\s*([\d.]+)\s*%", _deal_text(text))
+        post = _match(r"擴大[後之的]?[^。%]{0,60}?約?\s*([\d.]+)\s*%", _deal_text(text))
         acceptance = _match(r"佔供股項下提呈發售之供股股份總數約\s*([\d.]+)\s*%", text)
         undersubscribed = _match(r"餘下\s*([\d,]+)\s*股未獲認購", text)
+        outstanding = _match(r"已發行股份總數(?:為|約為)?\s*([\d,]+)\s*股", text)
         ratio_existing = _number(existing.group(1)) if existing else None
         ratio_post = _number(post.group(1)) if post else None
         acceptance_value = _number(acceptance.group(1)) if acceptance else None
@@ -100,6 +118,8 @@ class CapitalActionsAnalyzer:
             make("proceeds.net", net, text, net_needle or "", currency="HKD"),
             make("ratio.existing", ratio_existing, text, existing.group(0) if existing else "", unit="%"),
             make("ratio.post", ratio_post, text, post.group(0) if post else "", unit="%"),
+            make("shares.outstanding", _number(outstanding.group(1)) if outstanding else None,
+                 text, outstanding.group(0) if outstanding else "", unit="shares"),
             make("rights.acceptance_pct", acceptance_value,
                  text, acceptance.group(0) if acceptance else "", unit="%"),
             make("rights.undersubscribed.shares",
@@ -138,7 +158,7 @@ class CapitalActionsAnalyzer:
         if kind == "供股結果":
             patterns.append(r"將予配發及發行\s*([\d,]+)\s*股供股股份")
         patterns.extend([
-            r"合共\s*([\d,]+)\s*股(?:配售|認購)股份",
+            r"合共(?:為)?\s*([\d,]+)\s*股(?:配售|認購)股份",
             r"配售最多\s*([\d,]+)\s*股配售股份",
             r"(?:配售|認購)\s*([\d,]+)\s*股(?:配售|認購)股份",
         ])

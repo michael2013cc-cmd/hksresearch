@@ -56,6 +56,12 @@ SUBSCRIPTION_403 = (
     "及約61.00百萬港元。"
 )
 
+SUBSCRIPTION_8659 = (
+    "本公司於本公佈日期現有已發行股本的20.0%；及(ii) 本公司經配發及發行認購股份擴大後的"
+    "已發行股本約16.7%。 於本公佈日期，本公司已發行股份總數為823,331,036 股。"
+    "本公司有條件同意配發及發行，合共為164,666,206股認購股份，認購價為每股認購股份0.073港元。"
+)
+
 
 def _ann(title: str, tags: list[str], group: str = "公告及通告") -> Announcement:
     return Announcement(
@@ -170,6 +176,33 @@ def test_combined_proceeds_with_future_tense():
     facts = _facts(result)
     assert float(facts["proceeds.gross"]) == 61_200_000
     assert float(facts["proceeds.net"]) == 61_000_000
+
+
+def test_director_holding_percentage_is_not_used_as_deal_ratio():
+    text = (
+        PLACEMENT_2597
+        + " 執行董事持有24,984,600股內資股，約佔已發行股份總數的18.30%。"
+    )
+    result = CapitalActionsAnalyzer().analyze(
+        _ann("根據一般授權配售新H股之交割", ["配售"]), text
+    )
+    facts = _facts(result)
+    assert "ratio.existing" not in facts
+    assert float(facts["ratio.post"]) == 2.6
+
+
+def test_possessive_existing_ratio_and_outstanding_shares():
+    result = CapitalActionsAnalyzer().analyze(
+        _ann("根據一般授權認購新股份", ["根據一般性授權發行股份"]), SUBSCRIPTION_8659
+    )
+    facts = _facts(result)
+    assert float(facts["issue.shares"]) == 164_666_206
+    assert float(facts["issue.price"]) == 0.073
+    assert float(facts["ratio.existing"]) == 20.0
+    assert float(facts["ratio.post"]) == 16.7
+    assert float(facts["shares.outstanding"]) == 823_331_036
+    outstanding = next(f for f in result.events[0].facts if f.key == "shares.outstanding")
+    assert "823,331,036" in outstanding.evidence.quote
 
 
 def test_delay_notice_is_progress_without_warning():

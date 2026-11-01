@@ -89,6 +89,26 @@ PYTHONPATH=. python scripts/capital_analysis.py --date 2026-10-30
 - 延遲寄發通函、澄清、條款調整歸入「其他命中」，不強行抽數字。
 - 閾值在 `config/analyzers/capital.yaml`。
 
+## 行情數據與市值/成交額歸一（P2b）
+
+資本動作與 NDR 簡報默認會抓取港交所官方每日行情，把「募資額」「回購金額」換算成佔市值比例和當日成交額倍數：
+
+```bash
+PYTHONPATH=. python scripts/capital_analysis.py --date 2026-10-30
+PYTHONPATH=. python scripts/ndr_analysis.py --date 2026-10-30
+
+# 離線、或不想聯網時
+PYTHONPATH=. python scripts/capital_analysis.py --date 2026-10-30 --no-market
+```
+
+- 行情來源：主機板 `https://www.hkex.com.hk/eng/stat/smstat/dayquot/dYYMMDDe.htm`，GEM `https://www.hkex.com.hk/eng/stat/smstat/dayquot/GEM/e_GYYMMDD.htm`。固定寬度兩行報價，代碼補齊 5 位，停牌行單獨標記。
+- 快取：`data/cache/market/quotes-YYYY-MM-DD.json`（已 gitignore）。同一天重跑不重複下載；刪掉檔案可強制刷新。
+- 市值(推算) = 股本 × 收市價（停牌或無成交時用前收市價）。這是代理指標，不是交易所官方市值。
+- 股本優先序：公告明確披露的 `shares.outstanding` > 事件庫同/近日 NDR `shares.end`（僅當它不小於比例推算值）> 由 `ratio.existing` / `ratio.post` 反推 > 單獨 NDR 期末股本。
+- 「募資/成交額」用當日成交額；低成交個股倍數會很大，只適合當日橫向對照，不能直接當成影響力結論。
+- `hkexradar.marketdata.average_turnover()` 已支持 20 日 ADV（平均成交額），但尚未批量抓取歷史行情接入報告。
+- H 股發行人的 NDR 期末股本可能只涵蓋 H 股，市值可能低估；簡報的數據質量段會提示該口徑。
+
 ## 技能
 
 `skills/hkex-radar/` 是可安装的 Qoder 技能（公告分类体系、NDR 操作手册、决策规则）。安装到用户级：

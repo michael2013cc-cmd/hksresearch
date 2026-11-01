@@ -96,3 +96,20 @@ def test_store_filters_by_code_and_day(tmp_path):
     assert store.count_events("2026-10-30", code="00700") == 1
     assert store.count_events() == 3
     store.close()
+
+
+def test_latest_fact_respects_cutoff_and_missing_keys(tmp_path):
+    store = EventStore(tmp_path / "events.db")
+    store.add_result(_announcement("1", "00700", 29),
+                     _result("100000", key="shares.end", news_id="1"))
+    store.add_result(_announcement("2", "00700", 30),
+                     _result("200000", key="shares.end", news_id="2"))
+
+    before = store.latest_fact("00700", "shares.end", on_or_before="2026-10-29")
+    latest = store.latest_fact("00700", "shares.end")
+
+    assert before is not None and before["value"] == "100000"
+    assert latest is not None and latest["value"] == "200000"
+    assert store.latest_fact("00700", "buyback.shares") is None
+    assert store.latest_fact("09988", "shares.end") is None
+    store.close()

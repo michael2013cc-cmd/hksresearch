@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
+from typing import Mapping
 
 from .config import load_yaml
+from .marketdata import Quote, market_cap
 
 DEFAULT_THRESHOLDS = {
     "dilution_p0_pct": 10.0,
@@ -12,6 +14,49 @@ DEFAULT_THRESHOLDS = {
 }
 
 _ISSUANCE = {"配售/認購", "配售/認購（上限）", "配售/認購完成", "供股", "供股結果", "可換股債券"}
+
+
+def pre_deal_shares(shares: float | None, ratio_existing: float | None,
+                    ratio_post: float | None) -> float | None:
+    if not shares:
+        return None
+    if ratio_existing:
+        return shares / (ratio_existing / 100)
+    if ratio_post:
+        return shares / (ratio_post / 100) - shares
+    return None
+
+
+def shares_for_market(*, announced: float | None, shares: float | None,
+                      ratio_existing: float | None, ratio_post: float | None,
+                      ndr_shares: float | None) -> tuple[float | None, str]:
+    if announced:
+        return announced, "公告"
+    derived = pre_deal_shares(shares, ratio_existing, ratio_post)
+    if derived and ndr_shares and ndr_shares >= derived:
+        return ndr_shares, "NDR"
+    if derived:
+        return derived, "推算"
+    if ndr_shares:
+        return ndr_shares, "NDR"
+    return None, ""
+
+
+def attach_market(rows: list[dict], quotes: Mapping[str, Quote]) -> list[dict]:
+    for row in rows:
+        quote = quotes.get(str(row.get("code", "")).zfill(5))
+        shares = row.get("shares_outstanding") or row.get("derived_shares")
+        cap = market_cap(quote, shares) if quote else None
+        amount = row.get("net") if row.get("net") is not None else row.get("gross")
+        row["close"] = quote.close if quote else None
+        row["turnover"] = quote.turnover if quote else None
+        row["market_cap"] = cap
+        row["net_to_cap"] = amount / cap * 100 if amount is not None and cap else None
+        row["amount_to_turnover"] = (
+            amount / quote.turnover
+            if amount is not None and quote is not None and quote.turnover else None
+        )
+    return rows
 
 
 def load_thresholds(root: Path) -> dict:
@@ -89,6 +134,14 @@ def _num(value, fmt: str = ",.0f") -> str:
     return f"{value:{fmt}}" if value is not None else "—"
 
 
+def _pct(value: float | None) -> str:
+    return f"{value:,.2f}%" if value is not None else "—"
+
+
+def _times(value: float | None) -> str:
+    return f"{value:,.1f}x" if value is not None else "—"
+
+
 def render_brief(rows: list[dict], alerts: list[dict], stats: dict, generated_at: datetime) -> str:
     day = stats.get("date") or generated_at.strftime("%Y-%m-%d")
     p0 = [alert for alert in alerts if alert["level"] == "P0"]
@@ -96,9 +149,15 @@ def render_brief(rows: list[dict], alerts: list[dict], stats: dict, generated_at
     rank = {alert["code"] + alert["time"]: 0 for alert in alerts}
 
     lines = [f"# 資本動作簡報 · {day}", ""]
+    market_note = (
+        "市值(推算) = 股本×收市價（股本優先取公告，其次 NDR 期末股本或發行比例推算）；"
+        "募資/成交額(倍) 以當日成交額計，低成交個股倍數易失真；未做 20 日 ADV。"
+        if stats.get("market_quotes") else
+        "未接入行情數據，金額未按市值/成交額歸一。"
+    )
     lines.append(
         f"> 掃描 {stats.get('total', len(rows))} 條公告；P0 {len(p0)} 條、P1 {len(p1)} 條。"
-        "金額為公告口徑，未接入市值/成交額，未做跨公司歸一。"
+        + market_note
     )
     lines.append("")
 
@@ -114,8 +173,11 @@ def render_brief(rows: list[dict], alerts: list[dict], stats: dict, generated_at
 
     lines.append("## 三、完成與終止")
     lines.append("")
-    lines.append("| 時間 | 代碼 | 公司 | 類型 | 股數 | 價格 | 總額 | 淨額 | 佔發行前 | 證據 |")
-    lines.append("|---|---|---|---|---|---|---|---|---|---|")
+    lines.append(
+        "| 時間 | 代碼 | 公司 | 類型 | 股數 | 價格 | 總額 | 淨額 | 佔發行前 | "
+        "市值(推算) | 募資/市值 | 募資/成交額(倍) | 證據 |"
+    )
+    lines.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|")
     key_types = {"配售/認購完成", "供股結果", "終止配售"}
     detail = [
         row for row in rows
@@ -134,7 +196,9 @@ def render_brief(rows: list[dict], alerts: list[dict], stats: dict, generated_at
         lines.append(
             f"| {row.get('time', '')} | {row.get('code', '')} | {row.get('name', '')} | "
             f"{row.get('type', '')} | {_num(row.get('shares'))} | {_num(row.get('price'), ',.3f')} | "
-            f"{_num(row.get('gross'))} | {_num(row.get('net'))} | {ratio_text} | {evidence[:100]} |"
+            f"{_num(row.get('gross'))} | {_num(row.get('net'))} | {ratio_text} | "
+            f"{_num(row.get('market_cap'))} | {_pct(row.get('net_to_cap'))} | "
+            f"{_times(row.get('amount_to_turnover'))} | {evidence[:100]} |"
         )
     lines.append("")
 
@@ -156,6 +220,16 @@ def render_brief(rows: list[dict], alerts: list[dict], stats: dict, generated_at
     failures = stats.get("text_failures") or []
     lines.append(f"- 文字抽取失敗：{len(failures)} 份" + (f"（{', '.join(failures)}）" if failures else ""))
     lines.append(f"- 事件庫寫入：{stats.get('stored', 0)} 條")
-    lines.append("- 口徑：攤薄按公告披露的發行前股本比例；未接入行情前不做絕對金額排序。")
+    if stats.get("market_quotes"):
+        lines.append(
+            f"- 行情：{stats['market_quotes']:,} 隻報價，匹配 "
+            f"{stats.get('market_matched', 0)}/{len(rows)} 條；市值為股本×收市價 proxy。"
+        )
+    else:
+        lines.append("- 行情：未接入，未按市值/成交額歸一。")
+    if stats.get("market_error"):
+        lines.append(f"- 行情抓取失敗：{stats['market_error']}")
+    lines.append("- 口徑：攤薄按公告披露的發行前股本比例；市值依賴公告推算股本，未接入實時股本。")
+    lines.append("- 股本：公告披露 > 同/近日 NDR 期末股本 > 發行比例推算；H 股發行人的 NDR 股數可能只涵蓋 H 股。")
     lines.append("")
     return "\n".join(lines)

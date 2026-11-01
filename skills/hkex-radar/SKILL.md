@@ -12,7 +12,7 @@ description: 分析港交所披露易公告并按事件族抽取事实、评估�
 - 需要把公告里的数字（股数、金额、摊薄比例）抽出来并给出处。
 - 需要把同一公司的多份公告串成事件（配售 → 次日 NDR → 月报表）。
 
-不适用于：实时行情、买卖建议、非港交所公告、纯新闻摘要。
+不适用于：实时行情（只用收市后的官方日行情做归一）、买卖建议、非港交所公告、纯新闻摘要。
 
 ## 仓库位置
 
@@ -47,6 +47,10 @@ PYTHONPATH=. python scripts/ndr_analysis.py --date 2026-10-30
 
 # 只分析资本动作（配售/供股/认购/可换股/合并）
 PYTHONPATH=. python scripts/capital_analysis.py --date 2026-10-30
+
+# 不联网/不取行情（市值、成交额列留空）
+PYTHONPATH=. python scripts/capital_analysis.py --date 2026-10-30 --no-market
+PYTHONPATH=. python scripts/ndr_analysis.py --date 2026-10-30 --no-market
 ```
 
 产物：
@@ -54,8 +58,17 @@ PYTHONPATH=. python scripts/capital_analysis.py --date 2026-10-30
 - `reports/YYYY-MM-DD-hkex-daily.md`：全市场日报。
 - `reports/YYYY-MM-DD-ndr-analysis.md`：NDR 分类明细。
 - `reports/YYYY-MM-DD-ndr-brief.md`：NDR 决策简报（P0/P1 + Top 5）。
-- `reports/YYYY-MM-DD-capital-actions.md`：资本动作简报（摊薄/供股认购率/完成/终止）。
+- `reports/YYYY-MM-DD-capital-actions.md`：资本动作简报（摊薄/供股认购率/完成/终止，含市值与成交额归一）。
 - `data/events.db`：事件库（documents / events / facts / links）。
+- `data/cache/market/quotes-YYYY-MM-DD.json`：当日行情缓存，删掉可强制刷新。
+
+## 行情与市值口径
+
+- 行情来自港交所官方每日报价页（主板 `dYYMMDDe.htm`，GEM `e_GYYMMDD.htm`），只覆盖**当日收市**，不是实时行情。
+- 市值(推算) = 股本 × 收市价（停牌/无成交用前收市价）。这是 proxy，不是交易所官方市值。
+- 股本优先序：公告 `shares.outstanding` > 同/近日 NDR `shares.end`（不小于比例推算值时才用）> `ratio.existing` / `ratio.post` 反推 > 单独 NDR 期末股本。
+- 「募资/市值」「募资/成交额」的分母不同：前者是存量，后者是当日流量；低成交个股的成交额倍数会极大，不能单独当结论。
+- `--no-market` 时所有市值/成交额列留空，回答中必须写明“未按市值/成交额归一”。
 
 快速查询（Windows 不一定有 `sqlite3` CLI）：
 
@@ -83,7 +96,8 @@ for row in con.execute('''
 - 配售「最多 X 股」是上限，必须标明「上限」，不能当成已发行。
 - 通函、上市文件不独立抽数字；延迟寄发通函/澄清归入「其他命中」，不假装有结果。
 - 不输出买卖建议；“方向”是语义描述，不是股价预测。
-- 未接入行情数据时，明确写“未按市值/成交额归一”。
+- 报告有行情数据时，市值与成交额都是 proxy，必须保留「推算」字样并说明股本来源；无行情（或 `--no-market`）时，明确写“未按市值/成交额归一”。
+- H 股发行人的 NDR 期末股本可能只涵盖 H 股，不能直接当成总股本；公告披露了总股本时优先用公告。
 
 ## 事件族与参考文件
 

@@ -1,4 +1,4 @@
-# 资本动作操作手册（P2a）
+# 资本动作操作手册（P2a + P2b 行情归一）
 
 ## 范围
 
@@ -10,9 +10,11 @@
 
 ```bash
 PYTHONPATH=. python scripts/capital_analysis.py --date 2026-10-30
+# 不取行情：市值/成交额列留空
+PYTHONPATH=. python scripts/capital_analysis.py --date 2026-10-30 --no-market
 ```
 
-产物：`reports/YYYY-MM-DD-capital-actions.md/.json`；事件写入 `data/events.db`（`family=capital`），事实带页码与原文引文。
+产物：`reports/YYYY-MM-DD-capital-actions.md/.json`；事件写入 `data/events.db`（`family=capital`），事实带页码与原文引文。行情缓存 `data/cache/market/quotes-YYYY-MM-DD.json`。
 
 ## 事件类型
 
@@ -31,6 +33,7 @@ PYTHONPATH=. python scripts/capital_analysis.py --date 2026-10-30
 
 - `issue.shares`、`issue.price`（HKD/股）
 - `proceeds.gross`、`proceeds.net`（公告币种；当前仅 HKD）
+- `shares.outstanding`（公告明确披露的已发行股份总数，用于市值）
 - `ratio.existing`（占发行前股本，%）
 - `ratio.post`（占扩大后股本，%）
 - `rights.acceptance_pct`、`rights.undersubscribed.shares`
@@ -42,10 +45,21 @@ PYTHONPATH=. python scripts/capital_analysis.py --date 2026-10-30
 - 终止配售、进展/延迟不告警。
 - 阈值在 `config/analyzers/capital.yaml`。
 
+## 市值与流动性归一（P2b）
+
+- 行情取自港交所官方每日报价页，收盘价优先、前收市价兜底；停牌股无市值。
+- 市值(推算) = 股本 × 收市价。股本来源优先序：公告 `shares.outstanding` > 同/近日 NDR `shares.end`（仅当 ≥ 比例推算值）> `ratio.existing` / `ratio.post` 反推 > 单独 NDR `shares.end`。
+- `ratio.existing` / `ratio.post` 只在含「配售股份/认购股份/供股股份」的成交句子范围内匹配，避免把董事持股比例误当发行比例。
+- `募资/市值` = 净额（缺失用总额）÷ 推算市值，是存量占比；`募资/成交额` = 净额 ÷ 当日成交额，是当日流量倍数。
+- 低成交个股的成交额倍数会被放大（可达数百倍），只适合同日横向对照，不能单独据此升级告警级别。
+- 20 日 ADV 已有 `average_turnover()` 工具，但尚未批量抓历史行情；报告目前用当日成交额并明确标注。
+- H 股发行人的 NDR 期末股本可能只是 H 股部分，会低估市值；公告披露总股本时必须用公告值。
+
 ## 已知限制
 
-1. 未接入市值/成交额：募资额只按公告口径列示，不做跨公司排序。
+1. 当日成交额只代表当天流动性，不等同于 20 日 ADV；极低成交股的倍数噪声大。
 2. 只解析港元金额；美元/人民币/新台币公告只出股数与比例，金额标「—」。
 3. 「最多」是上限，不是确定发行；报告必须保留该措辞。
-4. 供股结果公告通常不含发行前股本，摊薄需与当日 NDR 事件交叉看。
-5. 可换股债券、股份合并目前只做标题级识别，转换价/合并比例待 P2b 后补。
+4. 供股结果公告通常不含发行前股本，摊薄需与当日 NDR 事件交叉看；市值可退回事件库的 NDR 期末股本。
+5. 可换股债券、股份合并目前只做标题级识别，转换价/合并比例待补。
+6. 市值是「股本×收市价」的代理值，不含多地上市总市值、A/H 溢价等口径差异。

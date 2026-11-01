@@ -9,7 +9,8 @@ from pathlib import Path
 
 from hkexradar.collector import load_snapshot, parse_payload
 from hkexradar.analyzers.ndr import Filing, NdrAnalyzer, filing_numbers, parse_filing
-from hkexradar.ndr_brief import build_alerts, load_thresholds, render_brief
+from hkexradar.marketdata import fetch_day
+from hkexradar.ndr_brief import attach_market, build_alerts, load_thresholds, render_brief
 from hkexradar.normalizer import normalize_all
 from hkexradar.pdf import download_pdf, extract_pages, extract_text, pdf_filename
 from hkexradar.store import EventStore
@@ -392,9 +393,23 @@ def render(rows: list[dict], stats: dict, generated_at: datetime) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Analysis of HKEX next-day disclosure returns")
     parser.add_argument("--date", default=date.today().isoformat())
+    parser.add_argument("--no-market", action="store_true",
+                        help="skip HKEX daily quotation lookup")
     args = parser.parse_args()
 
     rows, stats = analyse(args.date)
+    quotes = {}
+    market_error = ""
+    if not args.no_market:
+        try:
+            quotes = fetch_day(date.fromisoformat(args.date), ROOT / "data" / "cache" / "market")
+        except Exception as exc:  # noqa: BLE001 - 行情失败不应中断 NDR 分析
+            market_error = str(exc)
+    attach_market(rows, quotes)
+    stats["market_quotes"] = len(quotes)
+    stats["market_matched"] = sum(1 for row in rows if row.get("market_cap") is not None)
+    stats["market_error"] = market_error
+
     alerts = build_alerts(rows, load_thresholds(ROOT))
     stats["alert_counts"] = dict(Counter(alert["level"] for alert in alerts))
     out_dir = ROOT / "reports"
