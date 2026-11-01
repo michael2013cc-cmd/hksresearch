@@ -89,6 +89,22 @@ PYTHONPATH=. python scripts/capital_analysis.py --date 2026-10-30
 - 延遲寄發通函、澄清、條款調整歸入「其他命中」，不強行抽數字。
 - 閾值在 `config/analyzers/capital.yaml`。
 
+## 停復牌事件族（P3a）
+
+掃描「公告及通告」中標籤為停牌/復牌/短暫停牌的公告，以及交易所發出的停復牌通告；同時處理 PDF 公司公告與 HTML 交易所通告：
+
+```bash
+PYTHONPATH=. python scripts/trading_status_analysis.py --date 2026-10-30
+```
+
+產物：`reports/YYYY-MM-DD-trading-status.md` 與同名 `.json`；事件以 `family=trading_status` 寫入 `data/events.db`，事實帶頁碼與原文。
+
+- 分類：`停牌`、`短暫停牌`、`復牌`、`繼續停牌`。標題優先，正文兜底；「復牌進展/季度更新」不會誤判為復牌。
+- 全部事件直接 P0；「繼續停牌」是延續既有停牌，不代表當日新停牌。
+- 同日同代碼同狀態去重：公司公告優先於交易所通告；「繼續停牌」歸一到「停牌」分組；保留公司公告的同時，從交易所通告補齊缺失的生效時間。
+- 生效時間優先取與當前狀態匹配的日期，例如復牌公告同時提到原停牌日與復牌日時，只取復牌日。
+- HTML 交易所通告正文抽取後緩存於 `data/raw/YYYY-MM-DD/html/`；PDF 公司公告緩存於 `pdf/`。
+
 ## 行情數據與市值/成交額歸一（P2b）
 
 資本動作與 NDR 簡報默認會抓取港交所官方每日行情，把「募資額」「回購金額」換算成佔市值比例和當日成交額倍數：

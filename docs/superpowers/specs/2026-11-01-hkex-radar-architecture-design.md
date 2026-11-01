@@ -113,9 +113,11 @@ hkexradar/
     results.py            # P4
     governance.py         # P3
     dividends.py          # P5
-    trading_status.py     # P1 告警，P3 完整
+    trading_status.py     # P3a：停复牌四状态 + 时间/原因抽取
   store.py                # SQLite 事件库
   marketdata.py           # P2：行情/市值/成交额
+  htmltext.py             # P3a：HTML 通告正文抽取
+  trading_status_brief.py # P3a：停复牌去重、P0 告警、简报
   pipeline.py             # 编排：采集 → 路由 → 分析 → 存储 → 报告
   reporter.py             # 现有日报；新增族报/简报模板
   run.py                  # CLI：--family、--date、--from-time
@@ -373,7 +375,7 @@ CREATE INDEX idx_documents_date ON documents(published_at);
 | 业绩 | 业绩公告/盈警盈喜/营运数据 | 收入、利润、EPS、毛利率、股息、指引 | 同比、超预期、股息变化、指引方向 | P4 |
 | 治理 | 董事/CEO/CFO/公司秘书/核数师/委员会 | 离任原因、继任者、生效日、角色 | 角色关键性、是否核数师、继任是否空缺 | P3 |
 | 股息 | 股息/分派公告 | 每股股息、总额、除净日、派付日、频率 | 股息率（需股价）、同比、特别股息 | P5 |
-| 停复牌 | 停牌/复牌公告 | 原因、时间、复牌条件 | 直接 P0；持续时长 | P1 告警 |
+| 停复牌 | 停牌/复牌公告 + 交易所通告（PDF/HTML） | 状态、原因、生效时间、来源 | 直接 P0；继续停牌与当日新停牌区分 | P3a 已实现 |
 | 剩余内幕消息 | 未被其他族路由的内幕消息 | 事件实质、主体、金额、时间 | 按实质分类后的重大性 | P5 |
 
 ### 9.1 NDR 族的最小决策规则（P1）
@@ -516,7 +518,7 @@ P4 增加财务事实库（收入、利润、资产、股本），用于交易�
 ### P2–P5（后续，逐族交付）
 
 - P2（2–3 天）：`marketdata.py` + `capital_actions.py` + 摊薄监控；验收 10-30 的 2 配售/2 供股/1 换股转换。**P2a（资本动作）与 P2b（行情/市值归一）已完成**。
-- P3（3–5 天）：`transactions.py` + `governance.py` + `dividends.py` + 停复牌告警；30 份金标准，数字抽取 ≥90%。
+- P3（3–5 天）：`transactions.py` + `governance.py` + `dividends.py`；30 份金标准，数字抽取 ≥90%。**P3a（停复牌）已完成**：公司公告 PDF + 交易所通告 HTML、四状态分类、同日同状态去重、全部 P0 简报，2026-10-30 验收 15 份→12 个事件。
 - P4（4–6 天）：`results.py` + 财务事实库；20 份业绩，收入/利润/股息 ≥90%。
 - P5（2 天）：`inside_info.py` + 跨族日报 + 定时任务；一页简报 <5 分钟生成。
 

@@ -48,6 +48,9 @@ PYTHONPATH=. python scripts/ndr_analysis.py --date 2026-10-30
 # 只分析资本动作（配售/供股/认购/可换股/合并）
 PYTHONPATH=. python scripts/capital_analysis.py --date 2026-10-30
 
+# 只分析停复牌（公司公告 PDF + 交易所通告 HTML）
+PYTHONPATH=. python scripts/trading_status_analysis.py --date 2026-10-30
+
 # 不联网/不取行情（市值、成交额列留空）
 PYTHONPATH=. python scripts/capital_analysis.py --date 2026-10-30 --no-market
 PYTHONPATH=. python scripts/ndr_analysis.py --date 2026-10-30 --no-market
@@ -59,6 +62,7 @@ PYTHONPATH=. python scripts/ndr_analysis.py --date 2026-10-30 --no-market
 - `reports/YYYY-MM-DD-ndr-analysis.md`：NDR 分类明细。
 - `reports/YYYY-MM-DD-ndr-brief.md`：NDR 决策简报（P0/P1 + Top 5）。
 - `reports/YYYY-MM-DD-capital-actions.md`：资本动作简报（摊薄/供股认购率/完成/终止，含市值与成交额归一）。
+- `reports/YYYY-MM-DD-trading-status.md`：停复牌简报（全部 P0，含生效时间、原因、来源与证据）。
 - `data/events.db`：事件库（documents / events / facts / links）。
 - `data/cache/market/quotes-YYYY-MM-DD.json`：当日行情缓存，删掉可强制刷新。
 
@@ -98,6 +102,8 @@ for row in con.execute('''
 - 不输出买卖建议；“方向”是语义描述，不是股价预测。
 - 报告有行情数据时，市值与成交额都是 proxy，必须保留「推算」字样并说明股本来源；无行情（或 `--no-market`）时，明确写“未按市值/成交额归一”。
 - H 股发行人的 NDR 期末股本可能只涵盖 H 股，不能直接当成总股本；公告披露了总股本时优先用公告。
+- 停复牌同日同代码同状态时，公司公告优先于交易所通告；去重后可从未被保留的通告补齐缺失时间。
+- 「继续暂停买卖」「復牌進展/季度更新」是既有停牌的延续，不是当日新停牌，也不是复牌。
 
 ## 事件族与参考文件
 
@@ -107,9 +113,10 @@ for row in con.execute('''
 | 分类路由与例行清单 | `references/taxonomy.md` | 已实现 |
 | 告警与决策口径 | `references/decision-rules.md` | 已实现 |
 | 资本动作（配售/供股/可转债） | `references/capital-playbook.md` | 已实现（完成/结果/终止） |
+| 停复牌（含交易所通告） | `references/decision-rules.md` | 已实现（全部 P0） |
 | 交易（须予披露/关连） | P3，未实现 | 计划中 |
 | 业绩/盈警 | P4，未实现 | 计划中 |
-| 治理/股息/停复牌 | P3–P5，未实现 | 计划中 |
+| 治理/股息 | P3–P5，未实现 | 计划中 |
 
 未实现的族只能做“标题级”提示，不得输出未经核验的数字。
 
