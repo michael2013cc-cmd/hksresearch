@@ -1,4 +1,4 @@
-from hkexradar.ndr import filing_numbers, parse_events, parse_filing
+from hkexradar.analyzers.ndr import filing_numbers, parse_events, parse_filing
 
 
 def _wrap(event_text: str, end_balance: str = "2026年10月30日 1,000,000 0 1,000,000") -> str:

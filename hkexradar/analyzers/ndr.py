@@ -3,6 +3,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
+from .base import AnalyzerEvent, AnalyzerFact, AnalyzerResult, Evidence
+
 _DATE = r"\d{4}年\d{1,2}月\d{1,2}日"
 _EVENT_HEAD = re.compile(r"(\d+)\)\.\s*")
 _TAIL = re.compile(r"^(?P<delta>-?[\d,]+)?\s*(?P<pct>[\d.]+)?\s*%\s*(?P<rest>.*)$")
@@ -251,3 +253,87 @@ def filing_numbers(filing: Filing) -> tuple[int, int, int]:
         elif event.delta > 0 and "購回" not in event.desc:
             issued_new += event.delta
     return issued, cancelled, issued_new
+
+
+def _quote(text: str, needle: str, width: int = 140) -> str:
+    index = text.find(needle)
+    if index < 0:
+        return text[:width].strip()
+    start = max(0, index - 30)
+    return text[start:index + width].strip()
+
+
+def _fact(key: str, value: int | float | None, text: str, needle: str,
+          *, unit: str | None = None, currency: str | None = None) -> "AnalyzerFact | None":
+    if value is None or value == 0:
+        return None
+    shown = str(int(value)) if isinstance(value, float) and value.is_integer() else str(value)
+    return AnalyzerFact(
+        key=key,
+        value=shown,
+        unit=unit,
+        currency=currency,
+        evidence=Evidence(page=None, quote=_quote(text, needle)),
+    )
+
+
+class NdrAnalyzer:
+    family = "ndr"
+
+    def matches(self, ann) -> bool:
+        return ann.doc_group == "翌日披露報表"
+
+    def analyze(self, ann, text: str, ctx=None) -> AnalyzerResult:
+        filing = parse_filing(ann.news_id, text)
+        facts: list[AnalyzerFact] = []
+
+        buyback_shares = sum(item.shares for item in filing.buybacks)
+        candidates = [
+            _fact("buyback.shares", buyback_shares, text, "合共購回股份總數", unit="shares"),
+            _fact("buyback.cancel.shares", filing.buyback_cancel, text, "購回股份（擬註銷）", unit="shares"),
+            _fact("buyback.treasury.shares", filing.buyback_treasury, text, "購回股份（擬持作庫存股份）", unit="shares"),
+            _fact("pending.shares", sum(row.delta or 0 for row in filing.pending), text, "B. 贖回/購回", unit="shares"),
+            _fact("shares.start", filing.start_shares, text, "於下列日期開始時的結存", unit="shares"),
+            _fact("shares.end", filing.end_shares, text, "於下列日期結束時的結存", unit="shares"),
+            _fact("treasury.sold", filing.treasury_sold, text, "合共出售庫存股份總數", unit="shares"),
+        ]
+        facts.extend(item for item in candidates if item is not None)
+
+        amounts: dict[str, float] = {}
+        for item in filing.buybacks:
+            if item.amount is None:
+                continue
+            amounts[item.currency or "UNKNOWN"] = amounts.get(item.currency or "UNKNOWN", 0) + item.amount
+        for currency, amount in amounts.items():
+            fact = _fact(
+                f"buyback.amount.{currency}", amount, text, "合共付出的價格總額",
+                currency=None if currency == "UNKNOWN" else currency,
+            )
+            if fact is not None:
+                facts.append(fact)
+
+        issued, cancelled, issued_new = filing_numbers(filing)
+        for key, value, needle in (
+            ("issued.delta", issued, "變動日期"),
+            ("issued.new", issued_new, "變動日期"),
+            ("cancelled.shares", cancelled, "變動日期"),
+        ):
+            fact = _fact(key, value, text, needle, unit="shares")
+            if fact is not None:
+                facts.append(fact)
+
+        summary = f"{filing.category}；事件 {len(filing.events)} 項"
+        if filing.buybacks:
+            summary += f"，購回 {buyback_shares:,} 股"
+        if filing.pending:
+            summary += f"，待註銷 {sum(row.delta or 0 for row in filing.pending):,} 股"
+
+        event = AnalyzerEvent(
+            family=self.family,
+            type=filing.category,
+            code=ann.primary_code,
+            news_id=ann.news_id,
+            summary=summary,
+            facts=facts,
+        )
+        return AnalyzerResult(analyzer=self.family, events=[event])

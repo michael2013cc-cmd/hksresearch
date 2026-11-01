@@ -58,7 +58,7 @@ python -m hkexradar.run --date 2026-09-08 --limit 10
 PYTHONPATH=. python scripts/ndr_analysis.py --date 2026-10-30
 ```
 
-产物：`reports/YYYY-MM-DD-ndr-analysis.md`（分类分布、回購金额、註銷、发行事件、全部明细）与同名 `.json`。PDF 并发下载（8 线程），分类逻辑在 `hkexradar/ndr.py`。
+产物：`reports/YYYY-MM-DD-ndr-analysis.md`（分类分布、回購金额、註銷、发行事件、全部明细）与同名 `.json`。PDF 并发下载（8 线程），解析逻辑在 `hkexradar/analyzers/ndr.py`，统一的事件/事实契约在 `hkexradar/analyzers/base.py`。
 
 ## 测试
 

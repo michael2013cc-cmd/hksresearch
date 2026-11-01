@@ -8,7 +8,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 from hkexradar.collector import load_snapshot, parse_payload
-from hkexradar.ndr import Filing, filing_numbers, parse_filing
+from hkexradar.analyzers.ndr import Filing, filing_numbers, parse_filing
 from hkexradar.normalizer import normalize_all
 from hkexradar.pdf import download_pdf, extract_text, pdf_filename
 
