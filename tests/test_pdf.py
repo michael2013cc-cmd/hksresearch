@@ -7,6 +7,7 @@ from hkexradar.pdf import (
     _strip_disclaimer,
     _tighten_cjk,
     download_pdf,
+    extract_pages,
     extract_text,
     pdf_filename,
 )
@@ -35,6 +36,15 @@ def test_extract_text_from_real_pdf():
     text, status = extract_text(FIXTURE_PDF)
     assert status == "ok"
     assert len(text) > 100
+
+
+def test_extract_pages_keeps_page_numbers():
+    pages, text, status = extract_pages(FIXTURE_PDF)
+    assert status == "ok"
+    assert pages
+    assert pages[0][0] == 1
+    assert all(number >= 1 and content for number, content in pages)
+    assert pages[0][1] in text
 
 
 def test_extract_text_missing_file_degrades():

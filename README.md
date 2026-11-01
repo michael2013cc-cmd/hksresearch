@@ -60,6 +60,30 @@ PYTHONPATH=. python scripts/ndr_analysis.py --date 2026-10-30
 
 产物：`reports/YYYY-MM-DD-ndr-analysis.md`（分类分布、回購金额、註銷、发行事件、全部明细）与同名 `.json`。PDF 并发下载（8 线程），解析逻辑在 `hkexradar/analyzers/ndr.py`，统一的事件/事实契约在 `hkexradar/analyzers/base.py`。
 
+同一命令还会：
+
+- 把每份公告写成 `documents` / `events` / `facts` 记录，落入 `data/events.db`（SQLite，已 gitignore）。每条事实带页码与原文引文，重复运行按 `news_id` 幂等覆盖，类型变化会清掉旧事件。
+- 按 `config/analyzers/ndr.yaml` 的阈值生成 `reports/YYYY-MM-DD-ndr-brief.md`：稀释（发行股数/期初股本）、待註銷股本、回購强度、註銷强度；P0/P1 排序并附证据引文。
+- `內資股轉H股` 与 `股份合併/資本重組` 视为非稀释类别，不触发稀释告警（总股本未变）。
+
+```bash
+# 调整告警阈值后重跑即可
+cat config/analyzers/ndr.yaml
+
+# 直接查事件库
+sqlite3 data/events.db "select code,type,summary from events where substr(created_at,1,10)='2026-10-30'"
+```
+
+## 技能
+
+`skills/hkex-radar/` 是可安装的 Qoder 技能（公告分类体系、NDR 操作手册、决策规则）。安装到用户级：
+
+```bash
+cp -r skills/hkex-radar ~/.qoder/skills/
+```
+
+安装后可用 `/hkex-radar` 触发，回答“昨天回购最多的三家公司”这类问题时按事件库 + 证据引文作答。
+
 ## 测试
 
 ```bash

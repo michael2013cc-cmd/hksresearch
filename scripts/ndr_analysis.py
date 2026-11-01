@@ -8,9 +8,11 @@ from datetime import date, datetime
 from pathlib import Path
 
 from hkexradar.collector import load_snapshot, parse_payload
-from hkexradar.analyzers.ndr import Filing, filing_numbers, parse_filing
+from hkexradar.analyzers.ndr import Filing, NdrAnalyzer, filing_numbers, parse_filing
+from hkexradar.ndr_brief import build_alerts, load_thresholds, render_brief
 from hkexradar.normalizer import normalize_all
-from hkexradar.pdf import download_pdf, extract_text, pdf_filename
+from hkexradar.pdf import download_pdf, extract_pages, extract_text, pdf_filename
+from hkexradar.store import EventStore
 
 ROOT = Path(__file__).resolve().parents[1]
 GROUP = "翌日披露報表"
@@ -70,9 +72,14 @@ def analyse(day: str) -> tuple[list[dict], dict]:
     statuses = ensure_pdfs(anns, ROOT / "data" / "raw" / day / "pdf")
 
     rows: list[dict] = []
+    store = EventStore(ROOT / "data" / "events.db")
+    analyzer = NdrAnalyzer()
+    stored = 0
+    store_errors: list[str] = []
     for ann in anns:
         path = ROOT / "data" / "raw" / day / "pdf" / pdf_filename(ann.news_id)
-        text, status = extract_text(path, max_chars=30000)
+        pages, full_text, status = extract_pages(path)
+        text = full_text[:30000]
         filing: Filing = parse_filing(ann.news_id, text)
         issued, cancelled, issued_new = filing_numbers(filing)
         buyback_amounts = money_map([(b.currency, b.amount or 0) for b in filing.buybacks])
@@ -91,6 +98,8 @@ def analyse(day: str) -> tuple[list[dict], dict]:
             "tag": " / ".join(ann.headline_tags),
             "category": filing.category,
             "subtypes": filing.subtypes,
+            "start_shares": filing.start_shares,
+            "end_shares": filing.end_shares,
             "issued_delta": issued,
             "cancelled": cancelled,
             "issued_new": issued_new,
@@ -109,10 +118,18 @@ def analyse(day: str) -> tuple[list[dict], dict]:
                 "",
             ),
         })
+        try:
+            store.add_result(ann, analyzer.analyze(ann, text, pages=pages))
+            stored += 1
+        except Exception as exc:  # noqa: BLE001 - 单份归档失败不应中断整日分析
+            store_errors.append(f"{ann.primary_code}: {exc}")
+    store.close()
 
     stats = {
         "date": day,
         "total": len(rows),
+        "stored": stored,
+        "store_errors": store_errors,
         "category_counts": dict(Counter(row["category"] for row in rows)),
         "tag_counts": dict(Counter(tag for row in rows for tag in row["tag"].split(" / "))),
         "dual_tag": sum(1 for row in rows if " / " in row["tag"]),
@@ -378,17 +395,24 @@ def main() -> int:
     args = parser.parse_args()
 
     rows, stats = analyse(args.date)
+    alerts = build_alerts(rows, load_thresholds(ROOT))
+    stats["alert_counts"] = dict(Counter(alert["level"] for alert in alerts))
     out_dir = ROOT / "reports"
     out_dir.mkdir(exist_ok=True)
     json_path = out_dir / f"{args.date}-ndr.json"
     md_path = out_dir / f"{args.date}-ndr-analysis.md"
+    brief_path = out_dir / f"{args.date}-ndr-brief.md"
     json_path.write_text(
         json.dumps({"stats": stats, "filings": rows}, ensure_ascii=False, indent=1),
         encoding="utf-8",
     )
-    md_path.write_text(render(rows, stats, datetime.now()), encoding="utf-8")
-    print(f"filings={stats['total']} categories={len(stats['category_counts'])}")
+    now = datetime.now()
+    md_path.write_text(render(rows, stats, now), encoding="utf-8")
+    brief_path.write_text(render_brief(rows, alerts, stats, now), encoding="utf-8")
+    print(f"filings={stats['total']} categories={len(stats['category_counts'])} "
+          f"alerts={len(alerts)} stored={stats['stored']}")
     print(f"report: {md_path}")
+    print(f"brief: {brief_path}")
     return 0
 
 

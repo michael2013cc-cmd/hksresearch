@@ -2,6 +2,9 @@ __pycache__/
 .pytest_cache/
 data/raw/
 data/cache/
+data/events.db
+data/events.db-wal
+data/events.db-shm
 reports/*.md
 reports/*.json
 config/settings.yaml

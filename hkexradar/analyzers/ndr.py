@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from functools import partial
 
 from .base import AnalyzerEvent, AnalyzerFact, AnalyzerResult, Evidence
 
@@ -264,16 +265,23 @@ def _quote(text: str, needle: str, width: int = 140) -> str:
 
 
 def _fact(key: str, value: int | float | None, text: str, needle: str,
-          *, unit: str | None = None, currency: str | None = None) -> "AnalyzerFact | None":
+          *, unit: str | None = None, currency: str | None = None,
+          pages: list[tuple[int, str]] | None = None) -> "AnalyzerFact | None":
     if value is None or value == 0:
         return None
     shown = str(int(value)) if isinstance(value, float) and value.is_integer() else str(value)
+    quote = _quote(text, needle)
+    page = None
+    if pages:
+        page = next((number for number, content in pages if quote in content), None)
+        if page is None:
+            page = next((number for number, content in pages if needle in content), None)
     return AnalyzerFact(
         key=key,
         value=shown,
         unit=unit,
         currency=currency,
-        evidence=Evidence(page=None, quote=_quote(text, needle)),
+        evidence=Evidence(page=page, quote=quote),
     )
 
 
@@ -283,19 +291,21 @@ class NdrAnalyzer:
     def matches(self, ann) -> bool:
         return ann.doc_group == "翌日披露報表"
 
-    def analyze(self, ann, text: str, ctx=None) -> AnalyzerResult:
+    def analyze(self, ann, text: str, ctx=None,
+                pages: list[tuple[int, str]] | None = None) -> AnalyzerResult:
         filing = parse_filing(ann.news_id, text)
         facts: list[AnalyzerFact] = []
+        make = partial(_fact, pages=pages)
 
         buyback_shares = sum(item.shares for item in filing.buybacks)
         candidates = [
-            _fact("buyback.shares", buyback_shares, text, "合共購回股份總數", unit="shares"),
-            _fact("buyback.cancel.shares", filing.buyback_cancel, text, "購回股份（擬註銷）", unit="shares"),
-            _fact("buyback.treasury.shares", filing.buyback_treasury, text, "購回股份（擬持作庫存股份）", unit="shares"),
-            _fact("pending.shares", sum(row.delta or 0 for row in filing.pending), text, "B. 贖回/購回", unit="shares"),
-            _fact("shares.start", filing.start_shares, text, "於下列日期開始時的結存", unit="shares"),
-            _fact("shares.end", filing.end_shares, text, "於下列日期結束時的結存", unit="shares"),
-            _fact("treasury.sold", filing.treasury_sold, text, "合共出售庫存股份總數", unit="shares"),
+            make("buyback.shares", buyback_shares, text, "合共購回股份總數", unit="shares"),
+            make("buyback.cancel.shares", filing.buyback_cancel, text, "購回股份（擬註銷）", unit="shares"),
+            make("buyback.treasury.shares", filing.buyback_treasury, text, "購回股份（擬持作庫存股份）", unit="shares"),
+            make("pending.shares", sum(row.delta or 0 for row in filing.pending), text, "B. 贖回/購回", unit="shares"),
+            make("shares.start", filing.start_shares, text, "於下列日期開始時的結存", unit="shares"),
+            make("shares.end", filing.end_shares, text, "於下列日期結束時的結存", unit="shares"),
+            make("treasury.sold", filing.treasury_sold, text, "合共出售庫存股份總數", unit="shares"),
         ]
         facts.extend(item for item in candidates if item is not None)
 
@@ -305,7 +315,7 @@ class NdrAnalyzer:
                 continue
             amounts[item.currency or "UNKNOWN"] = amounts.get(item.currency or "UNKNOWN", 0) + item.amount
         for currency, amount in amounts.items():
-            fact = _fact(
+            fact = make(
                 f"buyback.amount.{currency}", amount, text, "合共付出的價格總額",
                 currency=None if currency == "UNKNOWN" else currency,
             )
@@ -318,7 +328,7 @@ class NdrAnalyzer:
             ("issued.new", issued_new, "變動日期"),
             ("cancelled.shares", cancelled, "變動日期"),
         ):
-            fact = _fact(key, value, text, needle, unit="shares")
+            fact = make(key, value, text, needle, unit="shares")
             if fact is not None:
                 facts.append(fact)
 

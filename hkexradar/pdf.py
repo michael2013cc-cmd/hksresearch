@@ -57,21 +57,35 @@ def _strip_disclaimer(text: str) -> str:
     return text[end + len(_DISCLAIMER_END):].lstrip()
 
 
-def extract_text(path: Path, max_chars: int = 6000) -> tuple[str, str]:
+def extract_pages(path: Path, max_pages: int = 5) -> tuple[list[tuple[int, str]], str, str]:
     if not path.exists():
-        return "", "unavailable"
+        return [], "", "unavailable"
     try:
         document = pymupdf.open(path)
         try:
-            raw = "\n".join(
-                document[index].get_text("text")
-                for index in range(min(5, len(document)))
-            )
+            raw_pages = [
+                (index + 1, document[index].get_text("text"))
+                for index in range(min(max_pages, len(document)))
+            ]
         finally:
             document.close()
     except Exception:  # noqa: BLE001 - 单份解析失败只降级该条
-        return "", "unavailable"
-    text = _strip_disclaimer(_tighten_cjk(" ".join(raw.split())))
+        return [], "", "unavailable"
+
+    pages: list[tuple[int, str]] = []
+    for number, raw in raw_pages:
+        cleaned = _strip_disclaimer(raw) if number == 1 else raw
+        cleaned = _tighten_cjk(" ".join(cleaned.split()))
+        if cleaned:
+            pages.append((number, cleaned))
+    text = " ".join(content for _, content in pages)
     if not text or _looks_garbled(text):
-        return "", "unavailable"
+        return [], "", "unavailable"
+    return pages, text, "ok"
+
+
+def extract_text(path: Path, max_chars: int = 6000) -> tuple[str, str]:
+    pages, text, status = extract_pages(path)
+    if status != "ok":
+        return "", status
     return text[:max_chars], "ok"

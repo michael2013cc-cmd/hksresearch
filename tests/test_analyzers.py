@@ -82,6 +82,17 @@ def test_ndr_analyzer_builds_buyback_event_with_evidence():
         assert fact.evidence.quote in text
 
 
+def test_ndr_analyzer_attaches_page_numbers():
+    text = _wrap(
+        "1). 購回股份 (股份購回並註銷) 於2026年10月13日購回之股份已於2026年10月30日註銷 "
+        "變動日期 2026年10月30日 -100,000 0.1 % HKD 10 "
+        "B. 贖回/購回股份 (擬註銷但截至期終結存日期尚未註銷) 備註："
+    )
+    result = NdrAnalyzer().analyze(_announcement(), text, pages=[(1, "封面"), (2, text)])
+    assert result.events[0].facts
+    assert all(fact.evidence.page == 2 for fact in result.events[0].facts)
+
+
 def test_ndr_analyzer_records_pending_and_new_issuance():
     text = _wrap(
         "1). 供股 - 涉及新股於2026年10月30日配發及發行532,227,024股供股股份 "

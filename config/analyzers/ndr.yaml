@@ -1,0 +1,6 @@
+thresholds:
+  dilution_p0_pct: 10
+  dilution_p1_pct: 5
+  pipeline_p1_pct: 5
+  buyback_p1_pct: 1
+  cancellation_p1_pct: 2
